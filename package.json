@@ -1,0 +1,10 @@
+{
+  "name": "sign-flow",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix relay",
+    "build": "npm run build --prefix relay",
+    "lint": "npm run lint --prefix relay",
+    "start": "npm run start --prefix relay"
+  }
+}
