@@ -1,31 +1,42 @@
-# Root + relay
-node_modules/
-relay/node_modules/
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Next.js (relay)
-relay/.next/
-relay/out/
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
-# Env & secrets
-.env
-.env.*
-!relay/.env.example
+# testing
+/coverage
 
-# Misc
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
 .DS_Store
 *.pem
+
+# debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Vercel
-relay/.vercel
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
 
-# TypeScript
+# vercel
+.vercel
+
+# typescript
 *.tsbuildinfo
-relay/next-env.d.ts
-
-# Testing
-coverage/
-relay/coverage/
+next-env.d.ts
