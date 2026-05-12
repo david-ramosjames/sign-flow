@@ -31,6 +31,12 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+This repo keeps the Next.js app under **`relay/`**.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. In your Vercel project, open **Settings → General → Root Directory** and set it to **`relay`**, then redeploy. That makes Vercel run install/build against `relay/package.json` and use the Next.js runtime correctly.
+
+2. If you leave Root Directory as the repository root instead, the root **`vercel.json`** runs `npm ci` / `npm run build` with `--prefix relay` so dependencies still install; setting Root Directory to **`relay`** is still recommended for the cleanest Next.js integration.
+
+3. Add environment variables from **`relay/.env.example`** in **Vercel → Settings → Environment Variables** (do not commit real secrets).
+
+Check out the [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
