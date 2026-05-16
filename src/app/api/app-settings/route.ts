@@ -1,16 +1,44 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getRelayStore } from "@/lib/db";
+import { getSignFlowStore } from "@/lib/db";
 import { requireSessionUser } from "@/lib/auth/get-session";
 import { nowIso } from "@/lib/time";
 import type { AppSettings } from "@/types/models";
+import { isGmailWorkspaceDelegationConfigured } from "@/services/gmail-workspace-dwd";
+import { DEFAULT_COMMUNICATION_TEMPLATES } from "@/lib/messaging";
+import { DEFAULT_REMINDER_SCHEDULE } from "@/lib/reminder-schedule";
+
+const communicationTemplatesPatchSchema = z
+  .object({
+    firmName: z.string().min(1).optional(),
+    firmLogoUrl: z.string().optional(),
+    signingSmsTemplate: z.string().min(1).optional(),
+    signingEmailSubjectTemplate: z.string().min(1).optional(),
+    signingEmailBodyTemplate: z.string().min(1).optional(),
+    emailHtmlFooterTemplate: z.string().min(1).optional(),
+    reminderSmsTemplate: z.string().min(1).optional(),
+    reminderEmailSubjectTemplate: z.string().min(1).optional(),
+    reminderEmailBodyTemplate: z.string().min(1).optional(),
+  })
+  .optional();
+
+const reminderSchedulePatchSchema = z
+  .object({
+    firstReminderAfterSendMinutes: z.number().int().min(5).max(10080).optional(),
+    secondReminderLocalHour: z.number().int().min(0).max(23).optional(),
+    thirdReminderHoursAfterSecond: z.number().int().min(1).max(168).optional(),
+    maxAutoReminders: z.number().int().min(1).max(10).optional(),
+  })
+  .optional();
 
 const patchSchema = z.object({
-  adobeClientIdLast4: z.string().nullable().optional(),
+  docusealConfigured: z.boolean().optional(),
   twilioConfigured: z.boolean().optional(),
-  smsFromNumberOrService: z.string().nullable().optional(),
-  defaultLanguage: z.enum(["en", "es"]).optional(),
+  dropboxConfigured: z.boolean().optional(),
   slackWebhookConfigured: z.boolean().optional(),
+  emailConfigured: z.boolean().optional(),
+  communicationTemplates: communicationTemplatesPatchSchema,
+  reminderSchedule: reminderSchedulePatchSchema,
 });
 
 export async function GET() {
@@ -19,19 +47,30 @@ export async function GET() {
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const store = getRelayStore();
+  const store = getSignFlowStore();
   const existing = await store.getAppSettings();
   return NextResponse.json({
     item: existing,
     env: {
-      hasAdobeClientId: Boolean(process.env.ADOBE_CLIENT_ID),
-      hasAdobeClientSecret: Boolean(process.env.ADOBE_CLIENT_SECRET),
-      hasAdobeRefreshToken: Boolean(process.env.ADOBE_REFRESH_TOKEN),
-      hasAdobeBaseUrl: Boolean(process.env.ADOBE_BASE_URL),
+      hasDocusealApiKey: Boolean(process.env.DOCUSEAL_API_KEY),
+      hasDocusealApiUrl: Boolean(process.env.DOCUSEAL_API_URL),
+      hasDocusealWebhookSecret: Boolean(process.env.DOCUSEAL_WEBHOOK_SECRET),
+      hasDocusealAdminBase: Boolean(process.env.DOCUSEAL_ADMIN_BASE_URL),
+      hasFirebaseWebAuth:
+        Boolean(process.env.NEXT_PUBLIC_FIREBASE_API_KEY) &&
+        Boolean(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN) &&
+        Boolean(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) &&
+        Boolean(process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
+      hasGoogleClientId: Boolean(process.env.GOOGLE_CLIENT_ID),
+      hasGoogleClientSecret: Boolean(process.env.GOOGLE_CLIENT_SECRET),
+      hasSignFlowSessionSecret: Boolean(process.env.SIGNFLOW_SESSION_SECRET),
       hasTwilioAccountSid: Boolean(process.env.TWILIO_ACCOUNT_SID),
       hasTwilioAuthToken: Boolean(process.env.TWILIO_AUTH_TOKEN),
-      hasTwilioMessagingServiceSid: Boolean(process.env.TWILIO_MESSAGING_SERVICE_SID),
       hasTwilioFromNumber: Boolean(process.env.TWILIO_FROM_NUMBER),
+      hasGmailWorkspaceDelegation: isGmailWorkspaceDelegationConfigured(),
+      hasSendgrid: Boolean(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL),
+      hasGmailUserOAuth: Boolean(process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_EMAIL_FROM),
+      hasDropboxToken: Boolean(process.env.DROPBOX_ACCESS_TOKEN),
       hasSlackWebhook: Boolean(process.env.SLACK_WEBHOOK_URL),
     },
   });
@@ -47,25 +86,42 @@ export async function PATCH(req: Request) {
   const parsed = patchSchema.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const store = getRelayStore();
+  const store = getSignFlowStore();
   const existing =
     (await store.getAppSettings()) ??
     ({
       id: "default",
-      adobeClientIdLast4: null,
+      docusealConfigured: false,
       twilioConfigured: false,
-      smsFromNumberOrService: null,
-      defaultLanguage: "en",
+      dropboxConfigured: false,
       slackWebhookConfigured: false,
+      emailConfigured: false,
       updatedAt: nowIso(),
     } satisfies AppSettings);
 
+  const { communicationTemplates: ctPatch, reminderSchedule: rsPatch, ...flagPatches } = parsed.data;
+
   const updated: AppSettings = {
     ...existing,
-    ...parsed.data,
+    ...flagPatches,
     id: "default",
     updatedAt: nowIso(),
   };
+
+  if (ctPatch !== undefined) {
+    updated.communicationTemplates = {
+      ...DEFAULT_COMMUNICATION_TEMPLATES,
+      ...(existing.communicationTemplates ?? {}),
+      ...ctPatch,
+    };
+  }
+  if (rsPatch !== undefined) {
+    updated.reminderSchedule = {
+      ...DEFAULT_REMINDER_SCHEDULE,
+      ...(existing.reminderSchedule ?? {}),
+      ...rsPatch,
+    };
+  }
   await store.upsertAppSettings(updated);
   return NextResponse.json({ item: updated });
 }

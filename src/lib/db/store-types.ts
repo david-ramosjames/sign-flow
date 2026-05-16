@@ -1,44 +1,29 @@
-import type {
-  AppSettings,
-  DocumentTemplate,
-  MessageTemplate,
-  RelayEvent,
-  ReminderSchedule,
-  SigningRequest,
-  StaffUser,
-} from "@/types/models";
+import type { AppSettings, Lead, SigningEvent, SigningRequest } from "@/types/models";
 
 export type StoreSnapshot = {
+  leads: Lead[];
   signingRequests: SigningRequest[];
-  documentTemplates: DocumentTemplate[];
-  reminderSchedules: ReminderSchedule[];
-  messageTemplates: MessageTemplate[];
-  events: RelayEvent[];
-  staffUsers: StaffUser[];
+  signingEvents: SigningEvent[];
   appSettings: AppSettings | null;
 };
 
-export interface RelayStore {
+export interface SignFlowStore {
   isMock: boolean;
   snapshot(): Promise<StoreSnapshot>;
+
+  getLead(id: string): Promise<Lead | null>;
+  listLeads(): Promise<Lead[]>;
+  upsertLead(doc: Lead): Promise<void>;
+
   getSigningRequest(id: string): Promise<SigningRequest | null>;
   listSigningRequests(): Promise<SigningRequest[]>;
   upsertSigningRequest(doc: SigningRequest): Promise<void>;
-  getDocumentTemplate(id: string): Promise<DocumentTemplate | null>;
-  listDocumentTemplates(): Promise<DocumentTemplate[]>;
-  upsertDocumentTemplate(doc: DocumentTemplate): Promise<void>;
-  deleteDocumentTemplate(id: string): Promise<void>;
-  getReminderSchedule(id: string): Promise<ReminderSchedule | null>;
-  listReminderSchedules(): Promise<ReminderSchedule[]>;
-  upsertReminderSchedule(doc: ReminderSchedule): Promise<void>;
-  deleteReminderSchedule(id: string): Promise<void>;
-  getMessageTemplate(id: string): Promise<MessageTemplate | null>;
-  listMessageTemplates(): Promise<MessageTemplate[]>;
-  upsertMessageTemplate(doc: MessageTemplate): Promise<void>;
-  listEventsForSigningRequest(signingRequestId: string): Promise<RelayEvent[]>;
-  appendEvent(ev: RelayEvent): Promise<void>;
-  listStaffUsers(): Promise<StaffUser[]>;
-  upsertStaffUser(doc: StaffUser): Promise<void>;
+  /** Find signing request by DocuSeal submission id. */
+  findSigningRequestByDocusealSubmissionId(submissionId: number): Promise<SigningRequest | null>;
+
+  listSigningEventsForRequest(signingRequestId: string): Promise<SigningEvent[]>;
+  appendSigningEvent(ev: SigningEvent): Promise<void>;
+
   getAppSettings(): Promise<AppSettings | null>;
   upsertAppSettings(doc: AppSettings): Promise<void>;
 }

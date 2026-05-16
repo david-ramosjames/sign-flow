@@ -1,11 +1,11 @@
 {
   "indexes": [
     {
-      "collectionGroup": "events",
+      "collectionGroup": "signingEvents",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "signingRequestId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
       ]
     }
   ],

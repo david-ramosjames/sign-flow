@@ -1,172 +1,135 @@
 /**
  * Firestore-aligned domain types for Sign Flow (Ramos James Law).
- * Adobe Acrobat Sign remains the legal system of record; these records orchestrate retainer delivery and reminders.
+ * DocuSeal is the system of record for templates, signing sessions, and signed PDFs.
+ * Firestore tracks lead workflow, signing request state, reminders, and communication history.
  */
-
-export type SigningRequestStatus =
-  | "Draft"
-  | "Sent"
-  | "Viewed"
-  | "Signed"
-  | "Completed"
-  | "Declined"
-  | "Expired"
-  | "Failed";
-
-export type DeliveryChannel = "email" | "sms" | "whatsapp";
-
-export type ReminderChannel = "sms" | "email" | "both";
 
 export type SupportedLanguage = "en" | "es";
 
-export type ReminderStepKind = "relative_minutes" | "next_local_morning";
+export type LeadStatus = "new" | "signing_sent" | "signed" | "archived" | "lost";
 
-export type ReminderStep = {
+export type Lead = {
   id: string;
-  kind: ReminderStepKind;
-  /** Used when kind === "relative_minutes" — minutes after the agreement was first sent. */
-  delayMinutes?: number;
-  /** Used when kind === "next_local_morning" — local hour (0–23) on the next calendar day after `delayMinutes` optional anchor. */
-  morningHour?: number;
-  /** Optional anchor: wait at least this many minutes before evaluating "next morning". */
-  minDelayMinutes?: number;
-  channel: ReminderChannel;
-  messageTemplateId?: string;
-  sendWindowStart?: string;
-  sendWindowEnd?: string;
-};
-
-export type SigningRequest = {
-  id: string;
-  leadFirstName: string;
-  leadLastName: string;
-  leadFullName: string;
+  clientName: string;
   phone: string | null;
   email: string | null;
   language: SupportedLanguage;
-  documentTemplateId: string;
-  adobeAgreementId: string | null;
-  signingUrl: string | null;
-  status: SigningRequestStatus;
-  deliveryChannels: DeliveryChannel[];
-  remindersEnabled: boolean;
-  remindersPaused: boolean;
-  reminderScheduleId: string;
-  nextReminderAt: string | null;
-  lastReminderAt: string | null;
-  lastSentAt: string | null;
-  reminderCount: number;
-  assignedStaffUserId: string | null;
-  staffNotes: string | null;
-  smsConsentConfirmed: boolean;
-  /** Opt-in for WhatsApp on the same mobile number; omit on legacy records (treated as false). */
-  whatsappConsentConfirmed?: boolean;
-  /** When true, reminder engine should surface an intake call task (Phase 2 cron). */
-  intakeCallAlert: boolean;
-  contactedAt: string | null;
+  source: string;
   createdAt: string;
   updatedAt: string;
-  completedAt: string | null;
+  assignedTo: string | null;
+  status: LeadStatus;
 };
 
-export type DocumentTemplate = {
-  id: string;
-  name: string;
-  adobeLibraryDocumentId: string | null;
-  adobeWorkflowId: string | null;
-  description: string;
-  matterType: string;
-  language: SupportedLanguage;
-  requiredFields: string[];
-  active: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
+export type SigningStatus = "draft" | "sent" | "viewed" | "completed" | "signed" | "expired" | "failed";
 
-export type ReminderSchedule = {
-  id: string;
-  name: string;
-  active: boolean;
-  steps: ReminderStep[];
-  maxReminders: number;
-  createdAt: string;
-  updatedAt: string;
-};
+export type DeliveryMethod = "sms" | "email";
 
-export type MessageTemplateChannel = "sms" | "email" | "both";
-
-export type MessageTemplate = {
-  id: string;
-  name: string;
-  channel: MessageTemplateChannel;
-  language: SupportedLanguage;
-  body: string;
-  active: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type EventType =
+export type SigningEventType =
   | "created"
-  | "adobe_agreement_created"
-  | "email_sent"
   | "sms_sent"
-  | "whatsapp_sent"
-  | "reminder_sent"
+  | "email_sent"
   | "viewed"
   | "signed"
-  | "completed"
-  | "declined"
-  | "expired"
-  | "cancelled"
-  | "failed"
-  | "paused"
-  | "resumed"
-  | "staff_note"
-  | "contacted"
-  | "webhook_received";
+  | "downloaded"
+  | "dropbox_saved"
+  | "slack_posted"
+  | "reminder_sent"
+  | "failed";
 
-export type RelayEvent = {
+export type SigningRequest = {
   id: string;
-  signingRequestId: string;
-  type: EventType;
-  message: string;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-  createdBy: string | null;
-};
-
-export type StaffUser = {
-  id: string;
-  displayName: string;
-  email: string;
-  role: "admin" | "staff";
-  active: boolean;
+  leadId: string;
+  clientName: string;
+  phone: string | null;
+  email: string | null;
+  language: SupportedLanguage;
+  /** DocuSeal template id (integer from DocuSeal API). */
+  templateId: number;
+  templateName: string;
+  docusealSubmissionId: number | null;
+  docusealSubmitterId: number | null;
+  /** Primary signing link (DocuSeal embed / slug URL). */
+  signingUrl: string | null;
+  status: SigningStatus;
+  sentViaSms: boolean;
+  sentViaEmail: boolean;
+  reminderEnabled: boolean;
+  reminderCount: number;
+  nextReminderAt: string | null;
+  lastReminderAt: string | null;
+  completedAt: string | null;
+  /** DocuSeal-hosted URLs (metadata only; not binary in Firestore). */
+  signedPdfUrl: string | null;
+  auditCertificateUrl: string | null;
+  dropboxFolderPath: string | null;
+  dropboxSignedPdfPath: string | null;
+  dropboxAuditPath: string | null;
+  /** Optional Dropbox preview/share links for staff. */
+  dropboxSignedPdfLink: string | null;
+  dropboxAuditLink: string | null;
+  /** After automated reminder cadence ends, surface in “needs follow-up” filters. */
+  manualFollowUp: boolean;
+  sentAt: string | null;
+  lastActivityAt: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type SigningEvent = {
+  id: string;
+  signingRequestId: string;
+  leadId: string;
+  type: SigningEventType;
+  timestamp: string;
+  metadata: Record<string, unknown>;
+};
+
+/** DocuSeal template row (from API, not persisted in Firestore). */
+export type DocuSealTemplateSummary = {
+  id: number;
+  name: string;
+  slug: string | null;
+  archivedAt: string | null;
+  updatedAt: string | null;
+  folderName: string | null;
+  adminUrl: string | null;
+};
+
+/** Placeholders: `{{clientName}}`, `{{url}}`, `{{firm}}` — `{{firm}}` uses `firmName`. */
+export type CommunicationTemplates = {
+  /** Value substituted for `{{firm}}` in all templates (SMS, email, HTML wordmark). */
+  firmName: string;
+  /** Optional absolute URL to your logo image (shown in HTML emails). If empty, falls back to `/rj-logo.svg` when `SIGNFLOW_EMAIL_PUBLIC_ORIGIN` is set. */
+  firmLogoUrl: string;
+  signingSmsTemplate: string;
+  signingEmailSubjectTemplate: string;
+  signingEmailBodyTemplate: string;
+  /** Plain text shown in the HTML email footer (escaped). Supports {{clientName}}, {{url}}, {{firm}}. */
+  emailHtmlFooterTemplate: string;
+  reminderSmsTemplate: string;
+  reminderEmailSubjectTemplate: string;
+  reminderEmailBodyTemplate: string;
+};
+
+/** Drives `computeNextReminderAt` when present on `AppSettings`. */
+export type ReminderScheduleSettings = {
+  firstReminderAfterSendMinutes: number;
+  /** Second reminder lands on the calendar day after (first send + first offset), at this local hour (server TZ). */
+  secondReminderLocalHour: number;
+  thirdReminderHoursAfterSecond: number;
+  maxAutoReminders: number;
 };
 
 export type AppSettings = {
   id: "default";
-  /** Display-only placeholders; secrets live in env vars. */
-  adobeClientIdLast4: string | null;
+  docusealConfigured: boolean;
   twilioConfigured: boolean;
-  smsFromNumberOrService: string | null;
-  defaultLanguage: SupportedLanguage;
+  dropboxConfigured: boolean;
   slackWebhookConfigured: boolean;
+  emailConfigured: boolean;
   updatedAt: string;
+  /** Editable from Admin → Messages & reminders; merged with code defaults when absent. */
+  communicationTemplates?: CommunicationTemplates | null;
+  reminderSchedule?: ReminderScheduleSettings | null;
 };
-
-export const ADOBE_MERGE_FIELD_KEYS = [
-  "first_name",
-  "last_name",
-  "full_name",
-  "phone",
-  "email",
-  "language",
-  "matter_type",
-  "date_sent",
-  "staff_member",
-] as const;
-
-export type AdobeMergeFieldKey = (typeof ADOBE_MERGE_FIELD_KEYS)[number];

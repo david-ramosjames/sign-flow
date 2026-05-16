@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { getRelayStore } from "@/lib/db";
+import { getSignFlowStore } from "@/lib/db";
 import { requireSessionUser } from "@/lib/auth/get-session";
-import { seedDocumentTemplates, seedMessageTemplates } from "@/lib/seed-data";
-import { buildDefaultReminderSchedule } from "@/lib/default-reminder-schedule";
 import { nowIso } from "@/lib/time";
-import type { AppSettings, StaffUser } from "@/types/models";
+import type { AppSettings } from "@/types/models";
+import { isGmailWorkspaceDelegationConfigured } from "@/services/gmail-workspace-dwd";
 
 export async function POST() {
   try {
@@ -13,65 +12,23 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const store = getRelayStore();
+  const store = getSignFlowStore();
   const results: string[] = [];
-
-  const existingTemplates = await store.listDocumentTemplates();
-  if (existingTemplates.length === 0) {
-    const templates = seedDocumentTemplates();
-    for (const t of templates) {
-      await store.upsertDocumentTemplate(t);
-    }
-    results.push(`Seeded ${templates.length} document templates`);
-  } else {
-    results.push("Skipped templates (already present)");
-  }
-
-  const existingMsgs = await store.listMessageTemplates();
-  if (existingMsgs.length === 0) {
-    const msgs = seedMessageTemplates();
-    for (const m of msgs) {
-      await store.upsertMessageTemplate(m);
-    }
-    results.push(`Seeded ${msgs.length} message templates`);
-  } else {
-    results.push("Skipped message templates (already present)");
-  }
-
-  const existingSched = await store.listReminderSchedules();
-  if (existingSched.length === 0) {
-    await store.upsertReminderSchedule(buildDefaultReminderSchedule());
-    results.push("Seeded default reminder schedule");
-  } else {
-    results.push("Skipped reminder schedule (already present)");
-  }
-
-  const staff = await store.listStaffUsers();
-  if (staff.length === 0) {
-    const t = nowIso();
-    const s: StaffUser = {
-      id: "staff_seed_intake",
-      displayName: "Intake Team",
-      email: "intake@ramosjameslaw.example",
-      role: "staff",
-      active: true,
-      createdAt: t,
-      updatedAt: t,
-    };
-    await store.upsertStaffUser(s);
-    results.push("Seeded sample staff user");
-  } else {
-    results.push("Skipped staff (already present)");
-  }
 
   if (!(await store.getAppSettings())) {
     const settings: AppSettings = {
       id: "default",
-      adobeClientIdLast4: process.env.ADOBE_CLIENT_ID ? process.env.ADOBE_CLIENT_ID.slice(-4) : null,
-      twilioConfigured: Boolean(process.env.TWILIO_ACCOUNT_SID),
-      smsFromNumberOrService: process.env.TWILIO_MESSAGING_SERVICE_SID ?? process.env.TWILIO_FROM_NUMBER ?? null,
-      defaultLanguage: "en",
+      docusealConfigured: Boolean(process.env.DOCUSEAL_API_KEY),
+      twilioConfigured: Boolean(
+        process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER,
+      ),
+      dropboxConfigured: Boolean(process.env.DROPBOX_ACCESS_TOKEN),
       slackWebhookConfigured: Boolean(process.env.SLACK_WEBHOOK_URL),
+      emailConfigured: Boolean(
+        isGmailWorkspaceDelegationConfigured() ||
+          process.env.SENDGRID_API_KEY ||
+          (process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_EMAIL_FROM),
+      ),
       updatedAt: nowIso(),
     };
     await store.upsertAppSettings(settings);

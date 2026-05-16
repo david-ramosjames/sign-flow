@@ -1,23 +1,23 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getRelayStore } from "@/lib/db";
+import { getSignFlowStore } from "@/lib/db";
+import { isFirestoreNotProvisionedError } from "@/lib/db/firestore-errors";
 import { requireSessionUser } from "@/lib/auth/get-session";
-import { createAndSendSigningRequest } from "@/server/signing-request-service";
+import { createLeadAndSigningRequest } from "@/server/signing-workflow";
 
 const postSchema = z.object({
-  leadFirstName: z.string().min(1),
-  leadLastName: z.string().min(1),
+  clientName: z.string().min(1),
   phone: z.string().optional().nullable(),
   email: z
     .preprocess((v) => (v === "" || v === null || v === undefined ? undefined : v), z.string().email().optional())
     .optional(),
   language: z.enum(["en", "es"]),
-  documentTemplateId: z.string().min(1),
-  deliveryChannels: z.array(z.enum(["email", "sms", "whatsapp"])).min(1),
-  staffNotes: z.string().optional().nullable(),
-  smsConsentConfirmed: z.boolean(),
-  whatsappConsentConfirmed: z.boolean().default(false),
-  assignedStaffUserId: z.string().optional().nullable(),
+  templateId: z.coerce.number().int().positive(),
+  sendSms: z.boolean(),
+  sendEmail: z.boolean(),
+  reminderEnabled: z.boolean(),
+  source: z.string().optional(),
+  assignedTo: z.string().optional().nullable(),
 });
 
 export async function GET() {
@@ -26,13 +26,24 @@ export async function GET() {
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const store = getRelayStore();
-  const items = await store.listSigningRequests();
-  const templates = await store.listDocumentTemplates();
-  const staff = await store.listStaffUsers();
-  const templatesById = Object.fromEntries(templates.map((t) => [t.id, t]));
-  const staffById = Object.fromEntries(staff.map((s) => [s.id, s]));
-  return NextResponse.json({ items, templatesById, staffById, store: store.isMock ? "mock" : "firestore" });
+  const store = getSignFlowStore();
+  try {
+    const items = await store.listSigningRequests();
+    const leads = await store.listLeads();
+    const leadsById = Object.fromEntries(leads.map((l) => [l.id, l]));
+    return NextResponse.json({ items, leadsById, store: store.isMock ? "mock" : "firestore" });
+  } catch (e) {
+    if (isFirestoreNotProvisionedError(e)) {
+      return NextResponse.json(
+        {
+          error: "Firestore returned NOT_FOUND for this project.",
+          hint: "Create a Firestore database in the Firebase Console (same project as FIREBASE_PROJECT_ID), set FIRESTORE_DATABASE_ID if you use a non-default database, or set USE_MOCK_DB=true to use in-memory data locally.",
+        },
+        { status: 503 },
+      );
+    }
+    throw e;
+  }
 }
 
 export async function POST(req: Request) {
@@ -49,27 +60,33 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const email = parsed.data.email ? parsed.data.email.trim() : null;
-  const phone = parsed.data.phone ? parsed.data.phone.trim() : null;
+  const phone = parsed.data.phone?.trim() || null;
+  const email = parsed.data.email?.trim() || null;
+
+  if (parsed.data.sendSms && !phone) {
+    return NextResponse.json({ error: "Phone is required when SMS is selected." }, { status: 400 });
+  }
+  if (parsed.data.sendEmail && !email) {
+    return NextResponse.json({ error: "Email is required when email delivery is selected." }, { status: 400 });
+  }
 
   try {
-    const created = await createAndSendSigningRequest(
+    const { lead, signingRequest } = await createLeadAndSigningRequest(
       {
-        leadFirstName: parsed.data.leadFirstName,
-        leadLastName: parsed.data.leadLastName,
-        phone: phone || null,
-        email: email || null,
+        clientName: parsed.data.clientName,
+        phone,
+        email,
         language: parsed.data.language,
-        documentTemplateId: parsed.data.documentTemplateId,
-        deliveryChannels: parsed.data.deliveryChannels,
-        staffNotes: parsed.data.staffNotes ?? null,
-        smsConsentConfirmed: parsed.data.smsConsentConfirmed,
-        whatsappConsentConfirmed: parsed.data.whatsappConsentConfirmed,
-        assignedStaffUserId: parsed.data.assignedStaffUserId ?? null,
+        source: parsed.data.source ?? "dashboard",
+        templateId: parsed.data.templateId,
+        sendSms: parsed.data.sendSms,
+        sendEmail: parsed.data.sendEmail,
+        reminderEnabled: parsed.data.reminderEnabled,
+        assignedTo: parsed.data.assignedTo ?? null,
       },
       actor,
     );
-    return NextResponse.json({ item: created });
+    return NextResponse.json({ item: signingRequest, lead });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: msg }, { status: 400 });

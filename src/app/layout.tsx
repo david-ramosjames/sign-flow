@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Sign Flow — Ramos James Law",
-  description: "Retainer agreement signing with Adobe Acrobat Sign and Twilio delivery.",
+  description: "Personal injury lead signing — DocuSeal, Twilio, Dropbox, and Slack.",
 };
 
 export default function RootLayout({

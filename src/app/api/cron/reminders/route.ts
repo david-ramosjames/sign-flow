@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
-import { getRelayStore } from "@/lib/db";
+import { getSignFlowStore } from "@/lib/db";
+import { runReminderForRequest } from "@/server/signing-workflow";
 
 /**
- * Reminder cron (Phase 2):
- * - Secure this route with `CRON_SECRET` header or Vercel Cron auth.
- * - Query signing requests where nextReminderAt <= now and remindersEnabled && !remindersPaused.
- * - Re-fetch Adobe agreement status before sending.
- * - Send SMS/email per schedule step and increment reminderCount.
- *
- * MVP: returns a TODO summary and counts only.
+ * Reminder cron — call from Vercel Cron / Railway scheduler with `CRON_SECRET` header `x-cron-secret`.
  */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -17,12 +12,16 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const store = getRelayStore();
+  const store = getSignFlowStore();
   const items = await store.listSigningRequests();
-  const due = items.filter((i) => i.nextReminderAt && i.remindersEnabled && !i.remindersPaused);
-  return NextResponse.json({
-    ok: true,
-    note: "MVP stub — implement Adobe status check + Twilio resend in Phase 2.",
-    candidates: due.length,
-  });
+  const now = Date.now();
+  const due = items.filter((r) => r.reminderEnabled && r.nextReminderAt && new Date(r.nextReminderAt).getTime() <= now);
+
+  let processed = 0;
+  for (const r of due) {
+    const out = await runReminderForRequest(r);
+    if (out) processed += 1;
+  }
+
+  return NextResponse.json({ ok: true, due: due.length, processed });
 }

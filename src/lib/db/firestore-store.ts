@@ -1,78 +1,49 @@
-import { getApps, initializeApp, cert, type App } from "firebase-admin/app";
 import { getFirestore, type Firestore, type CollectionReference } from "firebase-admin/firestore";
-import type {
-  AppSettings,
-  DocumentTemplate,
-  MessageTemplate,
-  RelayEvent,
-  ReminderSchedule,
-  SigningRequest,
-  StaffUser,
-} from "@/types/models";
-import type { RelayStore, StoreSnapshot } from "./store-types";
-
-function getAdminApp(): App {
-  const existing = getApps();
-  if (existing.length) return existing[0]!;
-
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
-
-  if (!projectId || !clientEmail || !privateKey) {
-    throw new Error("Missing FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY for firebase-admin.");
-  }
-
-  return initializeApp({
-    credential: cert({ projectId, clientEmail, privateKey }),
-  });
-}
+import { getFirebaseAdminApp } from "@/lib/firebase/admin-app";
+import type { AppSettings, Lead, SigningEvent, SigningRequest } from "@/types/models";
+import type { SignFlowStore, StoreSnapshot } from "./store-types";
 
 function col<T extends Record<string, unknown>>(db: Firestore, name: string): CollectionReference<T> {
   return db.collection(name) as CollectionReference<T>;
 }
 
-export class FirestoreRelayStore implements RelayStore {
+export class FirestoreSignFlowStore implements SignFlowStore {
   isMock = false;
   private db: Firestore;
 
   constructor() {
-    const app = getAdminApp();
-    this.db = getFirestore(app);
+    const app = getFirebaseAdminApp();
+    const databaseId = process.env.FIRESTORE_DATABASE_ID?.trim();
+    this.db = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
   }
 
   async snapshot(): Promise<StoreSnapshot> {
-    const [
-      signingRequests,
-      documentTemplates,
-      reminderSchedules,
-      messageTemplates,
-      events,
-      staffUsers,
-      appSettings,
-    ] = await Promise.all([
+    const [leads, signingRequests, signingEvents, appSettings] = await Promise.all([
+      this.listLeads(),
       this.listSigningRequests(),
-      this.listDocumentTemplates(),
-      this.listReminderSchedules(),
-      this.listMessageTemplates(),
-      this.allEvents(),
-      this.listStaffUsers(),
+      this.allSigningEvents(),
       this.getAppSettings(),
     ]);
-    return {
-      signingRequests,
-      documentTemplates,
-      reminderSchedules,
-      messageTemplates,
-      events,
-      staffUsers,
-      appSettings,
-    };
+    return { leads, signingRequests, signingEvents, appSettings };
   }
 
-  private async allEvents(): Promise<RelayEvent[]> {
-    const snap = await this.db.collection("events").orderBy("createdAt", "desc").limit(500).get();
-    return snap.docs.map((d) => d.data() as RelayEvent);
+  private async allSigningEvents(): Promise<SigningEvent[]> {
+    const snap = await this.db.collection("signingEvents").orderBy("timestamp", "desc").limit(500).get();
+    return snap.docs.map((d) => d.data() as SigningEvent);
+  }
+
+  async getLead(id: string): Promise<Lead | null> {
+    const doc = await col<Lead>(this.db, "leads").doc(id).get();
+    return doc.exists ? (doc.data() as Lead) : null;
+  }
+
+  async listLeads(): Promise<Lead[]> {
+    const snap = await col<Lead>(this.db, "leads").orderBy("createdAt", "desc").get();
+    return snap.docs.map((d) => d.data() as Lead);
+  }
+
+  async upsertLead(doc: Lead): Promise<void> {
+    await col<Lead>(this.db, "leads").doc(doc.id).set(doc, { merge: true });
   }
 
   async getSigningRequest(id: string): Promise<SigningRequest | null> {
@@ -81,7 +52,7 @@ export class FirestoreRelayStore implements RelayStore {
   }
 
   async listSigningRequests(): Promise<SigningRequest[]> {
-    const snap = await col<SigningRequest>(this.db, "signingRequests").orderBy("createdAt", "desc").get();
+    const snap = await col<SigningRequest>(this.db, "signingRequests").orderBy("updatedAt", "desc").get();
     return snap.docs.map((d) => d.data() as SigningRequest);
   }
 
@@ -89,76 +60,28 @@ export class FirestoreRelayStore implements RelayStore {
     await col<SigningRequest>(this.db, "signingRequests").doc(doc.id).set(doc, { merge: true });
   }
 
-  async getDocumentTemplate(id: string): Promise<DocumentTemplate | null> {
-    const doc = await col<DocumentTemplate>(this.db, "documentTemplates").doc(id).get();
-    return doc.exists ? (doc.data() as DocumentTemplate) : null;
-  }
-
-  async listDocumentTemplates(): Promise<DocumentTemplate[]> {
-    const snap = await col<DocumentTemplate>(this.db, "documentTemplates").orderBy("createdAt", "desc").get();
-    return snap.docs.map((d) => d.data() as DocumentTemplate);
-  }
-
-  async upsertDocumentTemplate(doc: DocumentTemplate): Promise<void> {
-    await col<DocumentTemplate>(this.db, "documentTemplates").doc(doc.id).set(doc, { merge: true });
-  }
-
-  async deleteDocumentTemplate(id: string): Promise<void> {
-    await col<DocumentTemplate>(this.db, "documentTemplates").doc(id).delete();
-  }
-
-  async getReminderSchedule(id: string): Promise<ReminderSchedule | null> {
-    const doc = await col<ReminderSchedule>(this.db, "reminderSchedules").doc(id).get();
-    return doc.exists ? (doc.data() as ReminderSchedule) : null;
-  }
-
-  async listReminderSchedules(): Promise<ReminderSchedule[]> {
-    const snap = await col<ReminderSchedule>(this.db, "reminderSchedules").orderBy("createdAt", "desc").get();
-    return snap.docs.map((d) => d.data() as ReminderSchedule);
-  }
-
-  async upsertReminderSchedule(doc: ReminderSchedule): Promise<void> {
-    await col<ReminderSchedule>(this.db, "reminderSchedules").doc(doc.id).set(doc, { merge: true });
-  }
-
-  async deleteReminderSchedule(id: string): Promise<void> {
-    await col<ReminderSchedule>(this.db, "reminderSchedules").doc(id).delete();
-  }
-
-  async getMessageTemplate(id: string): Promise<MessageTemplate | null> {
-    const doc = await col<MessageTemplate>(this.db, "messageTemplates").doc(id).get();
-    return doc.exists ? (doc.data() as MessageTemplate) : null;
-  }
-
-  async listMessageTemplates(): Promise<MessageTemplate[]> {
-    const snap = await col<MessageTemplate>(this.db, "messageTemplates").orderBy("createdAt", "desc").get();
-    return snap.docs.map((d) => d.data() as MessageTemplate);
-  }
-
-  async upsertMessageTemplate(doc: MessageTemplate): Promise<void> {
-    await col<MessageTemplate>(this.db, "messageTemplates").doc(doc.id).set(doc, { merge: true });
-  }
-
-  async listEventsForSigningRequest(signingRequestId: string): Promise<RelayEvent[]> {
+  async findSigningRequestByDocusealSubmissionId(submissionId: number): Promise<SigningRequest | null> {
     const snap = await this.db
-      .collection("events")
-      .where("signingRequestId", "==", signingRequestId)
-      .orderBy("createdAt", "desc")
+      .collection("signingRequests")
+      .where("docusealSubmissionId", "==", submissionId)
+      .limit(1)
       .get();
-    return snap.docs.map((d) => d.data() as RelayEvent);
+    if (snap.empty) return null;
+    return snap.docs[0]!.data() as SigningRequest;
   }
 
-  async appendEvent(ev: RelayEvent): Promise<void> {
-    await col<RelayEvent>(this.db, "events").doc(ev.id).set(ev);
+  async listSigningEventsForRequest(signingRequestId: string): Promise<SigningEvent[]> {
+    const snap = await this.db
+      .collection("signingEvents")
+      .where("signingRequestId", "==", signingRequestId)
+      .get();
+    const rows = snap.docs.map((d) => d.data() as SigningEvent);
+    rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return rows;
   }
 
-  async listStaffUsers(): Promise<StaffUser[]> {
-    const snap = await col<StaffUser>(this.db, "staffUsers").orderBy("createdAt", "desc").get();
-    return snap.docs.map((d) => d.data() as StaffUser);
-  }
-
-  async upsertStaffUser(doc: StaffUser): Promise<void> {
-    await col<StaffUser>(this.db, "staffUsers").doc(doc.id).set(doc, { merge: true });
+  async appendSigningEvent(ev: SigningEvent): Promise<void> {
+    await col<SigningEvent>(this.db, "signingEvents").doc(ev.id).set(ev);
   }
 
   async getAppSettings(): Promise<AppSettings | null> {
@@ -171,10 +94,10 @@ export class FirestoreRelayStore implements RelayStore {
   }
 }
 
-let firestoreSingleton: FirestoreRelayStore | null = null;
+let firestoreSingleton: FirestoreSignFlowStore | null = null;
 
-export function getFirestoreStore(): FirestoreRelayStore {
-  if (!firestoreSingleton) firestoreSingleton = new FirestoreRelayStore();
+export function getFirestoreStore(): FirestoreSignFlowStore {
+  if (!firestoreSingleton) firestoreSingleton = new FirestoreSignFlowStore();
   return firestoreSingleton;
 }
 

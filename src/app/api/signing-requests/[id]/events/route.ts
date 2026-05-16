@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRelayStore } from "@/lib/db";
+import { getSignFlowStore } from "@/lib/db";
 import { requireSessionUser } from "@/lib/auth/get-session";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -9,7 +9,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await ctx.params;
-  const store = getRelayStore();
-  const events = await store.listEventsForSigningRequest(id);
+  const store = getSignFlowStore();
+  const events = await store.listSigningEventsForRequest(id);
   return NextResponse.json({ events });
 }

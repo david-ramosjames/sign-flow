@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { getSessionCookieName } from "@/lib/auth/session";
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -9,12 +10,13 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  if (process.env.RELAY_REQUIRE_AUTH !== "true") {
+  if (process.env.SIGNFLOW_REQUIRE_AUTH !== "true") {
     return NextResponse.next();
   }
 
-  const token = req.cookies.get("relay_session")?.value;
-  const secret = process.env.RELAY_SESSION_SECRET ?? "dev-insecure-secret-change-me";
+  const sessionCookie = getSessionCookieName();
+  const token = req.cookies.get(sessionCookie)?.value;
+  const secret = process.env.SIGNFLOW_SESSION_SECRET ?? "dev-insecure-secret-change-me";
 
   if (!token) {
     const url = req.nextUrl.clone();
@@ -31,7 +33,7 @@ export async function middleware(req: NextRequest) {
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
     const res = NextResponse.redirect(url);
-    res.cookies.set("relay_session", "", { httpOnly: true, path: "/", maxAge: 0 });
+    res.cookies.set(sessionCookie, "", { httpOnly: true, path: "/", maxAge: 0 });
     return res;
   }
 }

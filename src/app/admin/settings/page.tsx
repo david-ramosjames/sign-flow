@@ -5,11 +5,11 @@ import { useEffect, useState, startTransition } from "react";
 type SettingsResponse = {
   item: {
     id: "default";
-    adobeClientIdLast4: string | null;
+    docusealConfigured: boolean;
     twilioConfigured: boolean;
-    smsFromNumberOrService: string | null;
-    defaultLanguage: "en" | "es";
+    dropboxConfigured: boolean;
     slackWebhookConfigured: boolean;
+    emailConfigured: boolean;
     updatedAt: string;
   } | null;
   env: Record<string, boolean>;
@@ -31,9 +31,10 @@ export default function AdminSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Integrations</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Environment</h1>
         <p className="mt-1 text-sm text-[color:var(--muted)]">
-          Credentials are never stored in Firestore. Use environment variables in hosting (Vercel, Cloud Run, etc.).
+          Secrets stay in environment variables (Vercel, Railway, etc.). Firestore only stores integration flags you toggle
+          from this screen.
         </p>
       </div>
 
@@ -52,15 +53,47 @@ export default function AdminSettingsPage() {
           )}
         </ul>
         <div className="mt-4 text-xs text-slate-600">
-          Required for Phase 2: <code>ADOBE_*</code> and <code>TWILIO_*</code>. Optional: <code>SLACK_WEBHOOK_URL</code>,{" "}
+          Staff auth: <code>NEXT_PUBLIC_FIREBASE_*</code>, <code>SIGNFLOW_SESSION_SECRET</code>, Firebase Admin env vars,
+          optional <code>SIGNFLOW_ALLOWED_GOOGLE_EMAILS</code>. DocuSeal: <code>DOCUSEAL_API_URL</code>,{" "}
+          <code>DOCUSEAL_API_KEY</code>, optional <code>DOCUSEAL_WEBHOOK_SECRET</code>, <code>DOCUSEAL_ADMIN_BASE_URL</code>.
+          Twilio: <code>TWILIO_ACCOUNT_SID</code>, <code>TWILIO_AUTH_TOKEN</code>, <code>TWILIO_FROM_NUMBER</code>. Email:
+          Workspace delegation (<code>GMAIL_SERVICE_ACCOUNT_*</code>, <code>GMAIL_SEND_AS_EMAIL</code>), or SendGrid, or
+          Gmail user OAuth. Dropbox: <code>DROPBOX_ACCESS_TOKEN</code>. Slack: <code>SLACK_WEBHOOK_URL</code>. Cron:{" "}
           <code>CRON_SECRET</code>.
         </div>
       </div>
 
       <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
+        <div className="text-sm font-semibold text-slate-900">Firebase Authentication (staff)</div>
+        <p className="mt-2 text-sm text-slate-700">
+          Sign-in uses the Firebase JS SDK in the browser (Google provider), then the server verifies the Firebase ID token
+          and sets the Sign Flow session cookie. Enable Google in Firebase Console → Authentication, and add{" "}
+          <code className="text-xs">NEXT_PUBLIC_FIREBASE_*</code> from Project settings → Your apps.
+        </p>
+        <p className="mt-2 text-xs text-slate-600">
+          Authorized domains must include this app&apos;s host (and <code>localhost</code> for local dev).
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
+        <div className="text-sm font-semibold text-slate-900">DocuSeal webhooks</div>
+        <p className="mt-2 text-sm text-slate-700">
+          Point DocuSeal webhooks to:{" "}
+          <code className="rounded bg-slate-100 px-1 text-xs">https://your-host/api/webhooks/docuseal</code>
+        </p>
+        <p className="mt-2 text-xs text-slate-600">
+          Optional: set matching secret in <code>DOCUSEAL_WEBHOOK_SECRET</code> and configure the same value in DocuSeal
+          webhook settings if your deployment supports a shared secret header.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
         <div className="text-sm font-semibold text-slate-900">Firebase (Firestore)</div>
         <p className="mt-2 text-sm text-slate-700">
-          Server routes use <code className="text-xs">firebase-admin</code> with:
+          Collections: <code className="text-xs">leads</code>, <code className="text-xs">signingRequests</code>,{" "}
+          <code className="text-xs">signingEvents</code>, <code className="text-xs">appSettings/default</code> (flags plus
+          optional <code className="text-xs">communicationTemplates</code> and <code className="text-xs">reminderSchedule</code>{" "}
+          from Messages & reminders).
         </p>
         <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
           <li>
@@ -70,12 +103,9 @@ export default function AdminSettingsPage() {
             <code className="text-xs">FIREBASE_CLIENT_EMAIL</code>
           </li>
           <li>
-            <code className="text-xs">FIREBASE_PRIVATE_KEY</code> (escape newlines as <code>\n</code>)
+            <code className="text-xs">FIREBASE_PRIVATE_KEY</code>
           </li>
         </ul>
-        <p className="mt-3 text-xs text-slate-600">
-          For local demos without Firebase, omit these — Sign Flow falls back to an in-memory store (data resets on restart).
-        </p>
       </div>
     </div>
   );
