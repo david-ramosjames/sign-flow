@@ -12,7 +12,7 @@ import { createSubmission, downloadUrlToBuffer, getTemplate } from "@/services/d
 import { uploadDropboxFile, getDropboxTemporaryLink } from "@/services/dropbox-client";
 import { sendTransactionalEmail } from "@/services/email-delivery";
 import { postSlackMessage } from "@/services/slack-notify";
-import { sendSms } from "@/services/twilio-service";
+import { sendSms } from "@/services/quo-service";
 import { appendSigningEvent } from "@/services/signing-events";
 import type { Lead, LeadStatus, SigningRequest, SupportedLanguage } from "@/types/models";
 

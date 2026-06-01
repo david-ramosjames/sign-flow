@@ -124,7 +124,7 @@ export type ReminderScheduleSettings = {
 export type AppSettings = {
   id: "default";
   docusealConfigured: boolean;
-  twilioConfigured: boolean;
+  smsConfigured: boolean;
   dropboxConfigured: boolean;
   slackWebhookConfigured: boolean;
   emailConfigured: boolean;

@@ -19,9 +19,7 @@ export async function POST() {
     const settings: AppSettings = {
       id: "default",
       docusealConfigured: Boolean(process.env.DOCUSEAL_API_KEY),
-      twilioConfigured: Boolean(
-        process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER,
-      ),
+      smsConfigured: Boolean(process.env.QUO_API_KEY && process.env.QUO_FROM_NUMBER),
       dropboxConfigured: Boolean(process.env.DROPBOX_ACCESS_TOKEN),
       slackWebhookConfigured: Boolean(process.env.SLACK_WEBHOOK_URL),
       emailConfigured: Boolean(

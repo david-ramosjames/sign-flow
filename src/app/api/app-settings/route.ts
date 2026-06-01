@@ -33,7 +33,7 @@ const reminderSchedulePatchSchema = z
 
 const patchSchema = z.object({
   docusealConfigured: z.boolean().optional(),
-  twilioConfigured: z.boolean().optional(),
+  smsConfigured: z.boolean().optional(),
   dropboxConfigured: z.boolean().optional(),
   slackWebhookConfigured: z.boolean().optional(),
   emailConfigured: z.boolean().optional(),
@@ -64,9 +64,8 @@ export async function GET() {
       hasGoogleClientId: Boolean(process.env.GOOGLE_CLIENT_ID),
       hasGoogleClientSecret: Boolean(process.env.GOOGLE_CLIENT_SECRET),
       hasSignFlowSessionSecret: Boolean(process.env.SIGNFLOW_SESSION_SECRET),
-      hasTwilioAccountSid: Boolean(process.env.TWILIO_ACCOUNT_SID),
-      hasTwilioAuthToken: Boolean(process.env.TWILIO_AUTH_TOKEN),
-      hasTwilioFromNumber: Boolean(process.env.TWILIO_FROM_NUMBER),
+      hasQuoApiKey: Boolean(process.env.QUO_API_KEY),
+      hasQuoFromNumber: Boolean(process.env.QUO_FROM_NUMBER),
       hasGmailWorkspaceDelegation: isGmailWorkspaceDelegationConfigured(),
       hasSendgrid: Boolean(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL),
       hasGmailUserOAuth: Boolean(process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_EMAIL_FROM),
@@ -92,7 +91,7 @@ export async function PATCH(req: Request) {
     ({
       id: "default",
       docusealConfigured: false,
-      twilioConfigured: false,
+      smsConfigured: false,
       dropboxConfigured: false,
       slackWebhookConfigured: false,
       emailConfigured: false,

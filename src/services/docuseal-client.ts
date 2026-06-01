@@ -115,7 +115,7 @@ export type CreateSubmissionInput = {
   clientName: string;
   email: string | null;
   phone: string | null;
-  /** When false, DocuSeal does not send its own notifications (we send via Twilio / email provider). */
+  /** When false, DocuSeal does not send its own notifications (we send via Quo SMS / email provider). */
   sendDocusealEmail: boolean;
   sendDocusealSms: boolean;
 };

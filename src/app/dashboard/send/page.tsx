@@ -18,7 +18,7 @@ export default function SendSigningRequestPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
-  const [twilioReady, setTwilioReady] = useState<boolean | null>(null);
+  const [quoReady, setQuoReady] = useState<boolean | null>(null);
 
   async function loadTemplates() {
     setLoadingTemplates(true);
@@ -46,13 +46,11 @@ export default function SendSigningRequestPage() {
       const res = await fetch("/api/app-settings", { credentials: "include" });
       if (!res.ok) return;
       const j = (await res.json()) as {
-        env?: { hasTwilioAccountSid?: boolean; hasTwilioAuthToken?: boolean; hasTwilioFromNumber?: boolean };
+        env?: { hasQuoApiKey?: boolean; hasQuoFromNumber?: boolean };
       };
       const e = j.env;
       if (!e) return;
-      startTransition(() =>
-        setTwilioReady(Boolean(e.hasTwilioAccountSid && e.hasTwilioAuthToken && e.hasTwilioFromNumber)),
-      );
+      startTransition(() => setQuoReady(Boolean(e.hasQuoApiKey && e.hasQuoFromNumber)));
     })();
   }, []);
 
@@ -67,13 +65,12 @@ export default function SendSigningRequestPage() {
 
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">{error}</div> : null}
 
-      {twilioReady === false && sendSms ? (
+      {quoReady === false && sendSms ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-          <strong>SMS will not send</strong> until <code className="text-xs">TWILIO_ACCOUNT_SID</code>,{" "}
-          <code className="text-xs">TWILIO_AUTH_TOKEN</code>, and <code className="text-xs">TWILIO_FROM_NUMBER</code> are all set
-          in your server environment (then restart the app). Trial accounts must also verify the{" "}
-          <strong>destination</strong> number in Twilio. For local testing without Twilio, set{" "}
-          <code className="text-xs">TWILIO_SMS_MOCK=true</code> or uncheck SMS and use email only.
+          <strong>SMS will not send</strong> until <code className="text-xs">QUO_API_KEY</code> and{" "}
+          <code className="text-xs">QUO_FROM_NUMBER</code> are set in your server environment (then restart the app). US
+          numbers require Quo carrier (A2P) registration. For local testing without Quo, set{" "}
+          <code className="text-xs">QUO_SMS_MOCK=true</code> or uncheck SMS and use email only.
         </div>
       ) : null}
 
