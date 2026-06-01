@@ -19,6 +19,7 @@ import {
 } from "@/lib/messaging";
 import { newId, nowIso } from "@/lib/time";
 import { getSignFlowStore } from "@/lib/db";
+import { normalizeDocusealPublicUrl, normalizeSigningRequestDocusealUrls } from "@/lib/docuseal-public-url";
 import { createSubmission, downloadUrlToBuffer, getSubmission, getTemplate } from "@/services/docuseal-client";
 import { uploadDropboxFile, getDropboxTemporaryLink } from "@/services/dropbox-client";
 import type { EmailAttachment } from "@/lib/mime-rfc822";
@@ -80,7 +81,7 @@ export async function createLeadAndSigningRequest(
   const primary = submitters[0];
   if (!primary?.submission_id) throw new Error("DocuSeal did not return a submission id.");
 
-  const signingUrl = primary.embed_src ?? null;
+  const signingUrl = normalizeDocusealPublicUrl(primary.embed_src ?? null, primary.slug);
   const sentAt = nowIso();
   const sentDate = new Date(sentAt);
 
@@ -221,6 +222,19 @@ export async function purgeSigningRequest(signingRequestId: string): Promise<voi
   }
 }
 
+export async function repairStoredDocusealUrls(req: SigningRequest): Promise<SigningRequest> {
+  const fixed = normalizeSigningRequestDocusealUrls(req);
+  if (
+    fixed.signingUrl !== req.signingUrl ||
+    fixed.signedPdfUrl !== req.signedPdfUrl ||
+    fixed.auditCertificateUrl !== req.auditCertificateUrl
+  ) {
+    fixed.updatedAt = nowIso();
+    await getSignFlowStore().upsertSigningRequest(fixed);
+  }
+  return fixed;
+}
+
 export async function resendSigningNotifications(
   signingRequestId: string,
   opts: { sms?: boolean; email?: boolean },
@@ -228,7 +242,8 @@ export async function resendSigningNotifications(
   const store = getSignFlowStore();
   const appSettings = await store.getAppSettings();
   const outbound = mergeOutboundDelivery(appSettings);
-  const req = await store.getSigningRequest(signingRequestId);
+  const raw = await store.getSigningRequest(signingRequestId);
+  const req = raw ? await repairStoredDocusealUrls(raw) : null;
   if (!req?.signingUrl) throw new Error("Signing request not found or missing URL.");
   if (!isActiveSigningRequest(req)) throw new Error("This signing request was cancelled.");
 
@@ -335,8 +350,8 @@ export async function syncSigningRequestFromDocuseal(signingRequestId: string): 
   const { pdf, audit } = extractSubmissionDocumentUrls(raw);
   await applyDocusealCompletionToRequest({
     signingRequestId: req.id,
-    signedPdfUrl: pdf,
-    auditCertificateUrl: audit,
+    signedPdfUrl: normalizeDocusealPublicUrl(pdf),
+    auditCertificateUrl: normalizeDocusealPublicUrl(audit),
     source: "sync",
   });
 
@@ -521,6 +536,7 @@ export async function markSigningViewedFromWebhook(submissionId: number): Promis
 }
 
 export async function runReminderForRequest(req: SigningRequest): Promise<SigningRequest | null> {
+  req = await repairStoredDocusealUrls(req);
   if (!isActiveSigningRequest(req) || !req.reminderEnabled || !req.signingUrl) return null;
   if (
     req.status === "completed" ||

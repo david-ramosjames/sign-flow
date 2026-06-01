@@ -3,7 +3,7 @@ import { getSignFlowStore } from "@/lib/db";
 import { isSignFlowAdmin } from "@/lib/auth/is-admin";
 import { requireSessionUser } from "@/lib/auth/get-session";
 import { normalizeSigningRequestForDisplay } from "@/lib/signing-request-active";
-import { purgeSigningRequest } from "@/server/signing-workflow";
+import { purgeSigningRequest, repairStoredDocusealUrls } from "@/server/signing-workflow";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -15,7 +15,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const store = getSignFlowStore();
   const raw = await store.getSigningRequest(id);
   if (!raw) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const item = normalizeSigningRequestForDisplay(raw);
+  const repaired = await repairStoredDocusealUrls(raw);
+  const item = normalizeSigningRequestForDisplay(repaired);
   const lead = await store.getLead(item.leadId);
   return NextResponse.json({ item, lead });
 }

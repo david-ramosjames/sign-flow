@@ -1,3 +1,4 @@
+import { normalizeDocusealPublicUrl } from "@/lib/docuseal-public-url";
 import { isActiveSigningRequest } from "@/lib/signing-request-active";
 import { applyDocusealCompletionToRequest, markSigningViewedFromWebhook } from "@/server/signing-workflow";
 import { getSignFlowStore } from "@/lib/db";
@@ -56,8 +57,8 @@ export async function processDocusealWebhookJson(payload: unknown): Promise<void
     const { pdf, audit } = extractCompletionUrlsFromWebhookData(data);
     await applyDocusealCompletionToRequest({
       signingRequestId: req.id,
-      signedPdfUrl: pdf,
-      auditCertificateUrl: audit,
+      signedPdfUrl: normalizeDocusealPublicUrl(pdf),
+      auditCertificateUrl: normalizeDocusealPublicUrl(audit),
     });
     return;
   }

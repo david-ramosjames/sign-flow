@@ -1,3 +1,4 @@
+import { normalizeSigningRequestDocusealUrls } from "@/lib/docuseal-public-url";
 import type { SigningRequest, SigningStatus } from "@/types/models";
 
 /** Legacy rows used `deletedAt` for soft-hide; treat as cancelled. */
@@ -11,8 +12,9 @@ export function isActiveSigningRequest(req: SigningRequest): boolean {
 }
 
 export function normalizeSigningRequestForDisplay(req: SigningRequest): SigningRequest {
-  if (req.deletedAt && req.status !== "cancelled") {
-    return { ...req, status: "cancelled" satisfies SigningStatus };
+  let out = normalizeSigningRequestDocusealUrls(req);
+  if (out.deletedAt && out.status !== "cancelled") {
+    out = { ...out, status: "cancelled" satisfies SigningStatus };
   }
-  return req;
+  return out;
 }

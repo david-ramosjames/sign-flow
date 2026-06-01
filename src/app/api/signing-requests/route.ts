@@ -103,7 +103,7 @@ export async function POST(req: Request) {
       },
       actor,
     );
-    return NextResponse.json({ item: signingRequest, lead });
+    return NextResponse.json({ item: normalizeSigningRequestForDisplay(signingRequest), lead });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed";
     return NextResponse.json({ error: msg }, { status: 400 });
