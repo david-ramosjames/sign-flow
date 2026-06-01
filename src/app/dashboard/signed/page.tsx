@@ -70,7 +70,12 @@ export default function SignedDocumentsPage() {
                     <Link className="font-medium text-[color:var(--accent)] hover:underline" href={`/dashboard/requests/${r.id}`}>
                       {r.clientName}
                     </Link>
-                    <div className="text-xs text-slate-500">{leadsById[r.leadId]?.source ?? ""}</div>
+                    {(() => {
+                      const src = leadsById[r.leadId]?.source;
+                      return src && src !== "dashboard" ? (
+                        <div className="text-xs text-slate-500">{src}</div>
+                      ) : null;
+                    })()}
                   </td>
                   <td className="px-4 py-3">{r.templateName}</td>
                   <td className="px-4 py-3 text-xs text-slate-600">

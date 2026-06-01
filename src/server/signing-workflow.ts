@@ -21,6 +21,7 @@ import { newId, nowIso } from "@/lib/time";
 import { getSignFlowStore } from "@/lib/db";
 import { createSubmission, downloadUrlToBuffer, getSubmission, getTemplate } from "@/services/docuseal-client";
 import { uploadDropboxFile, getDropboxTemporaryLink } from "@/services/dropbox-client";
+import type { EmailAttachment } from "@/lib/mime-rfc822";
 import { sendTransactionalEmail } from "@/services/email-delivery";
 import { postSlackMessage } from "@/services/slack-notify";
 import { sendSms } from "@/services/quo-service";
@@ -432,20 +433,36 @@ export async function applyDocusealCompletionToRequest(input: {
 
   const teamEmails = parseEmailList(completionSettings.teamNotificationEmails);
   if (teamEmails.length > 0) {
+    const pdfUrl = req.signedPdfUrl;
+    let attachments: EmailAttachment[] | undefined;
+    if (pdfUrl) {
+      try {
+        const pdfBytes = await downloadUrlToBuffer(pdfUrl);
+        const base = req.clientName.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-") || "signed";
+        attachments = [{ filename: `${base}-signed.pdf`, content: pdfBytes, mimeType: "application/pdf" }];
+      } catch (e) {
+        await appendSigningEvent({
+          signingRequestId: req.id,
+          leadId: req.leadId,
+          type: "failed",
+          metadata: { step: "team_completed_pdf", error: String(e) },
+        });
+      }
+    }
     const { subject, text } = teamCompletedEmailFromSettings(appSettings, {
       clientName: req.clientName,
       templateName: req.templateName,
-      documentUrl: documentUrl || "(document link pending — check DocuSeal)",
+      documentUrl: documentUrl || "(see attached PDF or check DocuSeal)",
     });
     for (const to of teamEmails) {
       try {
-        const mail = await sendTransactionalEmail({ to, subject, textBody: text });
+        const mail = await sendTransactionalEmail({ to, subject, textBody: text, attachments });
         if (!mail.ok) throw new Error(mail.error);
         await appendSigningEvent({
           signingRequestId: req.id,
           leadId: req.leadId,
           type: "email_sent",
-          metadata: { kind: "team_completed", to },
+          metadata: { kind: "team_completed", to, attachedPdf: Boolean(attachments?.length) },
         });
       } catch (e) {
         await appendSigningEvent({

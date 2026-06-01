@@ -1,5 +1,5 @@
 import { SignJWT, importPKCS8 } from "jose";
-import { buildRfc822Message } from "@/lib/mime-rfc822";
+import { buildRfc822Message, type EmailAttachment } from "@/lib/mime-rfc822";
 
 /**
  * Google Workspace: send mail via Gmail API using a **dedicated** service account
@@ -179,6 +179,7 @@ export async function sendGmailViaWorkspaceDelegationDetailed(input: {
   subject: string;
   textBody: string;
   htmlBody?: string;
+  attachments?: EmailAttachment[];
 }): Promise<GmailDelegationSendResult> {
   const parsed = parseWorkspaceMailEnv();
   if (!parsed.ok) return { ok: false, error: parsed.error };
@@ -186,7 +187,14 @@ export async function sendGmailViaWorkspaceDelegationDetailed(input: {
   const tokenR = await mintDelegatedAccessToken(parsed);
   if ("error" in tokenR) return { ok: false, error: tokenR.error };
 
-  const raw = buildRfc822Message(input.to, parsed.sendAsEmail, input.subject, input.textBody, input.htmlBody);
+  const raw = buildRfc822Message(
+    input.to,
+    parsed.sendAsEmail,
+    input.subject,
+    input.textBody,
+    input.htmlBody,
+    input.attachments,
+  );
   const enc = Buffer.from(raw).toString("base64url");
   const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
     method: "POST",

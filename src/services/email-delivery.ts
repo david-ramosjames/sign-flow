@@ -2,12 +2,14 @@ import {
   isGmailWorkspaceDelegationConfigured,
   sendGmailViaWorkspaceDelegationDetailed,
 } from "@/services/gmail-workspace-dwd";
-import { buildRfc822Message } from "@/lib/mime-rfc822";
+import { buildRfc822Message, type EmailAttachment } from "@/lib/mime-rfc822";
+export type { EmailAttachment };
 export type SendTransactionalEmailInput = {
   to: string;
   subject: string;
   textBody: string;
   htmlBody?: string;
+  attachments?: EmailAttachment[];
 };
 
 export type SendTransactionalEmailResult = { ok: true } | { ok: false; error: string };
@@ -27,6 +29,16 @@ async function sendSendGrid(input: SendTransactionalEmailInput): Promise<boolean
         { type: "text/plain", value: input.textBody },
         ...(input.htmlBody ? [{ type: "text/html", value: input.htmlBody }] : []),
       ],
+      ...(input.attachments?.length
+        ? {
+            attachments: input.attachments.map((a) => ({
+              content: a.content.toString("base64"),
+              filename: a.filename,
+              type: a.mimeType ?? "application/octet-stream",
+              disposition: "attachment",
+            })),
+          }
+        : {}),
     }),
   });
   return res.ok;
@@ -58,7 +70,14 @@ async function sendGmailUserOAuth(input: SendTransactionalEmailInput): Promise<b
   const from = process.env.GOOGLE_EMAIL_FROM?.trim();
   const access = await refreshGoogleAccessToken();
   if (!from || !access) return false;
-  const raw = buildRfc822Message(input.to, from, input.subject, input.textBody, input.htmlBody);
+  const raw = buildRfc822Message(
+    input.to,
+    from,
+    input.subject,
+    input.textBody,
+    input.htmlBody,
+    input.attachments,
+  );
   const enc = Buffer.from(raw).toString("base64url");
   const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
     method: "POST",

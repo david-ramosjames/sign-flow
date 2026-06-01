@@ -71,7 +71,13 @@ export default function SendSigningRequestPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Send signing request</h1>
         <p className="mt-1 text-sm text-[color:var(--muted)]">
-          Send a secure signing link by SMS and/or email.
+          {outbound.signingSmsEnabled && outbound.signingEmailEnabled
+            ? "Send a secure signing link by SMS and/or email."
+            : outbound.signingSmsEnabled
+              ? "Send a secure signing link by SMS."
+              : outbound.signingEmailEnabled
+                ? "Send a secure signing link by email."
+                : "Send a secure signing link by SMS and/or email."}
         </p>
       </div>
 
@@ -90,7 +96,8 @@ export default function SendSigningRequestPage() {
           <code className="text-xs">QUO_FROM_NUMBER</code> (or <code className="text-xs">QUO_PHONE_NUMBER_ID</code>) are
           set — use a number from your Quo workspace, not another provider. US numbers require Quo carrier (A2P)
           registration. For local testing without Quo, set{" "}
-          <code className="text-xs">QUO_SMS_MOCK=true</code> or uncheck SMS and use email only.
+          <code className="text-xs">QUO_SMS_MOCK=true</code>
+          {outbound.signingEmailEnabled ? " or uncheck SMS and use email only." : "."}
         </div>
       ) : null}
 
@@ -182,28 +189,40 @@ export default function SendSigningRequestPage() {
           />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="text-sm font-medium text-slate-900">Phone</label>
-            <p className="mt-0.5 text-xs text-slate-500">Include country code (e.g. +1 for US).</p>
-            <input
-              className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+1…"
-            />
+        {(outbound.signingSmsEnabled || outbound.signingEmailEnabled) && (
+          <div
+            className={
+              outbound.signingSmsEnabled && outbound.signingEmailEnabled
+                ? "grid gap-4 sm:grid-cols-2"
+                : "space-y-4"
+            }
+          >
+            {outbound.signingSmsEnabled ? (
+              <div>
+                <label className="text-sm font-medium text-slate-900">Phone</label>
+                <p className="mt-0.5 text-xs text-slate-500">Include country code (e.g. +1 for US).</p>
+                <input
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+1…"
+                />
+              </div>
+            ) : null}
+            {outbound.signingEmailEnabled ? (
+              <div>
+                <label className="text-sm font-medium text-slate-900">Email</label>
+                <input
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="client@email.com"
+                />
+              </div>
+            ) : null}
           </div>
-          <div>
-            <label className="text-sm font-medium text-slate-900">Email (optional)</label>
-            <input
-              className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="client@email.com"
-            />
-          </div>
-        </div>
+        )}
 
         <div>
           <label className="text-sm font-medium text-slate-900">Language</label>
@@ -219,25 +238,19 @@ export default function SendSigningRequestPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-          <div className="text-sm font-semibold text-slate-900">Delivery</div>
-          {outbound.signingSmsEnabled ? (
+        {outbound.signingSmsEnabled && outbound.signingEmailEnabled ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+            <div className="text-sm font-semibold text-slate-900">Delivery</div>
             <label className="mt-3 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
               SMS
             </label>
-          ) : (
-            <p className="mt-3 text-xs text-slate-500">SMS is disabled for signing requests (admin settings).</p>
-          )}
-          {outbound.signingEmailEnabled ? (
             <label className="mt-2 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
               Email
             </label>
-          ) : (
-            <p className="mt-2 text-xs text-slate-500">Email is disabled for signing requests (admin settings).</p>
-          )}
-        </div>
+          </div>
+        ) : null}
 
         <label className="flex items-center gap-2 text-sm font-medium text-slate-900">
           <input type="checkbox" checked={reminderEnabled} onChange={(e) => setReminderEnabled(e.target.checked)} />

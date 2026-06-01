@@ -334,7 +334,9 @@ export default function DashboardPage() {
                         <Link href={`/dashboard/requests/${r.id}`} className="font-medium text-[color:var(--accent)] hover:underline">
                           {r.clientName}
                         </Link>
-                        <div className="text-xs text-slate-500">{lead?.source ?? "—"}</div>
+                        {lead?.source && lead.source !== "dashboard" ? (
+                          <div className="text-xs text-slate-500">{lead.source}</div>
+                        ) : null}
                       </td>
                       <td className="px-4 py-3 text-slate-800">
                         <div className="font-medium">{r.templateName}</div>
