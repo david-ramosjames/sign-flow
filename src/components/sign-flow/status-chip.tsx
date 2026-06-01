@@ -8,6 +8,7 @@ const styles: Record<SigningStatus, string> = {
   signed: "bg-amber-50 text-amber-950 ring-1 ring-[color:var(--brand-gold)]",
   expired: "bg-amber-50 text-amber-950 ring-1 ring-amber-200",
   failed: "bg-red-50 text-red-900 ring-1 ring-red-200",
+  cancelled: "bg-slate-100 text-slate-600 ring-1 ring-slate-300 line-through decoration-slate-400",
 };
 
 export function StatusChip({ status }: { status: SigningStatus }) {

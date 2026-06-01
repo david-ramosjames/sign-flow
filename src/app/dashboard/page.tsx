@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, startTransition } from "react";
 import { endOfDay, format, isValid, parse, startOfDay } from "date-fns";
-import type { Lead, SigningRequest, SigningStatus } from "@/types/models";
+import type { Lead, OutboundDeliverySettings, SigningRequest, SigningStatus } from "@/types/models";
+import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 import { postSigningResend } from "@/lib/post-signing-resend";
 import { StatusChip } from "@/components/sign-flow/status-chip";
 
@@ -48,11 +49,18 @@ const STATUS_FILTERS: { id: string; label: string; match: (r: SigningRequest) =>
   {
     id: "followup",
     label: "Needs follow-up",
-    match: (r) => r.manualFollowUp || (r.reminderEnabled && r.status !== "completed" && r.status !== "expired" && r.status !== "failed"),
+    match: (r) =>
+      r.manualFollowUp ||
+      (r.reminderEnabled &&
+        r.status !== "completed" &&
+        r.status !== "expired" &&
+        r.status !== "failed" &&
+        r.status !== "cancelled"),
   },
   { id: "sent", label: "Sent", match: (r) => r.status === "sent" || r.status === "viewed" },
   { id: "signed", label: "Completed", match: (r) => r.status === "completed" },
   { id: "failed", label: "Failed / expired", match: (r) => r.status === "failed" || r.status === "expired" },
+  { id: "cancelled", label: "Cancelled", match: (r) => r.status === "cancelled" },
 ];
 
 export default function DashboardPage() {
@@ -68,6 +76,7 @@ export default function DashboardPage() {
   const [templateCatalog, setTemplateCatalog] = useState<{ id: number; name: string }[]>([]);
   const [resendBusy, setResendBusy] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{ text: string; ok: boolean } | null>(null);
+  const [outbound, setOutbound] = useState<OutboundDeliverySettings>(DEFAULT_OUTBOUND_DELIVERY);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/signing-requests", { credentials: "include" });
@@ -93,6 +102,17 @@ export default function DashboardPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/app-settings", { credentials: "include" });
+      if (!res.ok) return;
+      const j = (await res.json()) as { item?: { outboundDelivery?: OutboundDeliverySettings } | null };
+      startTransition(() =>
+        setOutbound({ ...DEFAULT_OUTBOUND_DELIVERY, ...(j.item?.outboundDelivery ?? {}) }),
+      );
+    })();
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -304,9 +324,10 @@ export default function DashboardPage() {
               ) : (
                 rows.map((r) => {
                   const lead = data?.leadsById?.[r.leadId];
-                  const canResend = Boolean(r.signingUrl);
-                  const smsOk = canResend && Boolean(r.phone?.trim());
-                  const emailOk = canResend && Boolean(r.email?.trim());
+                  const canResend = Boolean(r.signingUrl) && r.status !== "cancelled";
+                  const smsOk = canResend && Boolean(r.phone?.trim()) && outbound.signingSmsEnabled;
+                  const emailOk = canResend && Boolean(r.email?.trim()) && outbound.signingEmailEnabled;
+                  const showResend = canResend && (outbound.signingSmsEnabled || outbound.signingEmailEnabled);
                   return (
                     <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/60">
                       <td className="px-4 py-3">
@@ -362,7 +383,7 @@ export default function DashboardPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 align-top">
-                        {!canResend ? (
+                        {!showResend ? (
                           <span className="text-xs text-slate-400">—</span>
                         ) : (
                           <div className="flex flex-col gap-1.5">

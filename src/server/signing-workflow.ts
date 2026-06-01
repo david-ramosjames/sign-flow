@@ -6,6 +6,7 @@ import {
   teamCompletedEmailFromSettings,
   thankYouSmsFromSettings,
 } from "@/lib/completion-notifications";
+import { mergeOutboundDelivery } from "@/lib/outbound-delivery";
 import {
   extractSubmissionDocumentUrls,
   submissionIsCompleted,
@@ -24,6 +25,7 @@ import { sendTransactionalEmail } from "@/services/email-delivery";
 import { postSlackMessage } from "@/services/slack-notify";
 import { sendSms } from "@/services/quo-service";
 import { appendSigningEvent } from "@/services/signing-events";
+import { isActiveSigningRequest, isCancelledSigningRequest } from "@/lib/signing-request-active";
 import type { Lead, LeadStatus, SigningRequest, SupportedLanguage } from "@/types/models";
 
 export type CreateSigningRequestInput = {
@@ -119,6 +121,14 @@ export async function createLeadAndSigningRequest(
 
   if (!signingUrl) throw new Error("DocuSeal did not return a signing URL.");
 
+  const outbound = mergeOutboundDelivery(appSettings);
+  if (input.sendSms && !outbound.signingSmsEnabled) {
+    throw new Error("SMS for signing requests is turned off in Admin → Messages (Signing request delivery).");
+  }
+  if (input.sendEmail && !outbound.signingEmailEnabled) {
+    throw new Error("Email for signing requests is turned off in Admin → Messages (Signing request delivery).");
+  }
+
   await store.upsertLead(lead);
   await store.upsertSigningRequest(signingRequest);
 
@@ -161,14 +171,72 @@ export async function createLeadAndSigningRequest(
   return { lead, signingRequest };
 }
 
+export async function cancelSigningRequest(
+  signingRequestId: string,
+  actor: { sub: string },
+): Promise<SigningRequest> {
+  const store = getSignFlowStore();
+  const req = await store.getSigningRequest(signingRequestId);
+  if (!req) throw new Error("Not found");
+  if (req.status === "completed") throw new Error("Completed requests cannot be cancelled.");
+  if (isCancelledSigningRequest(req)) throw new Error("This signing request is already cancelled.");
+
+  const t = nowIso();
+  req.status = "cancelled";
+  req.deletedAt = null;
+  req.reminderEnabled = false;
+  req.nextReminderAt = null;
+  req.manualFollowUp = false;
+  req.lastActivityAt = t;
+  req.updatedAt = t;
+  await store.upsertSigningRequest(req);
+
+  await appendSigningEvent({
+    signingRequestId: req.id,
+    leadId: req.leadId,
+    type: "cancelled",
+    metadata: { actor: actor.sub },
+  });
+
+  return req;
+}
+
+export async function purgeSigningRequest(signingRequestId: string): Promise<void> {
+  const store = getSignFlowStore();
+  const req = await store.getSigningRequest(signingRequestId);
+  if (!req) throw new Error("Not found");
+
+  const leadId = req.leadId;
+  await store.purgeSigningRequest(signingRequestId);
+
+  const siblings = (await store.listSigningRequests()).filter(
+    (r) => r.leadId === leadId && r.id !== signingRequestId && !isCancelledSigningRequest(r),
+  );
+  const lead = await store.getLead(leadId);
+  if (lead && siblings.length === 0 && lead.status !== "signed") {
+    lead.status = "archived";
+    lead.updatedAt = nowIso();
+    await store.upsertLead(lead);
+  }
+}
+
 export async function resendSigningNotifications(
   signingRequestId: string,
   opts: { sms?: boolean; email?: boolean },
 ): Promise<SigningRequest> {
   const store = getSignFlowStore();
   const appSettings = await store.getAppSettings();
+  const outbound = mergeOutboundDelivery(appSettings);
   const req = await store.getSigningRequest(signingRequestId);
   if (!req?.signingUrl) throw new Error("Signing request not found or missing URL.");
+  if (!isActiveSigningRequest(req)) throw new Error("This signing request was cancelled.");
+
+  if (opts.sms && !outbound.signingSmsEnabled) {
+    throw new Error("SMS for signing requests is turned off in Admin → Messages.");
+  }
+  if (opts.email && !outbound.signingEmailEnabled) {
+    throw new Error("Email for signing requests is turned off in Admin → Messages.");
+  }
 
   if (opts.sms) {
     if (!req.phone?.trim()) throw new Error("No phone number on file for this request; add a phone number to resend SMS.");
@@ -193,6 +261,7 @@ export async function syncSignedArtifactsToDropbox(signingRequestId: string): Pr
   const store = getSignFlowStore();
   const req = await store.getSigningRequest(signingRequestId);
   if (!req) throw new Error("Not found");
+  if (!isActiveSigningRequest(req)) throw new Error("This signing request was cancelled.");
   if (!req.signedPdfUrl && !req.auditCertificateUrl) {
     throw new Error("No DocuSeal document URLs on file yet; wait for completion or refresh from DocuSeal.");
   }
@@ -254,6 +323,7 @@ export async function syncSigningRequestFromDocuseal(signingRequestId: string): 
   const store = getSignFlowStore();
   const req = await store.getSigningRequest(signingRequestId);
   if (!req) throw new Error("Not found");
+  if (!isActiveSigningRequest(req)) throw new Error("This signing request was cancelled.");
   if (req.docusealSubmissionId == null) throw new Error("No DocuSeal submission id on this request.");
 
   const raw = await getSubmission(req.docusealSubmissionId);
@@ -289,7 +359,7 @@ export async function applyDocusealCompletionToRequest(input: {
 }): Promise<void> {
   const store = getSignFlowStore();
   const req = await store.getSigningRequest(input.signingRequestId);
-  if (!req) return;
+  if (!req || !isActiveSigningRequest(req)) return;
 
   const pdf = input.signedPdfUrl ?? null;
   const audit = input.auditCertificateUrl ?? null;
@@ -422,7 +492,8 @@ export async function applyDocusealCompletionToRequest(input: {
 export async function markSigningViewedFromWebhook(submissionId: number): Promise<void> {
   const store = getSignFlowStore();
   const req = await store.findSigningRequestByDocusealSubmissionId(submissionId);
-  if (!req || req.status === "viewed" || req.status === "completed" || req.status === "signed") return;
+  if (!req || !isActiveSigningRequest(req)) return;
+  if (req.status === "viewed" || req.status === "completed" || req.status === "signed") return;
   if (req.status === "sent") {
     req.status = "viewed";
     req.lastActivityAt = nowIso();
@@ -433,12 +504,19 @@ export async function markSigningViewedFromWebhook(submissionId: number): Promis
 }
 
 export async function runReminderForRequest(req: SigningRequest): Promise<SigningRequest | null> {
-  if (!req.reminderEnabled || !req.signingUrl) return null;
-  if (req.status === "completed" || req.status === "signed" || req.status === "expired" || req.status === "failed") {
+  if (!isActiveSigningRequest(req) || !req.reminderEnabled || !req.signingUrl) return null;
+  if (
+    req.status === "completed" ||
+    req.status === "signed" ||
+    req.status === "expired" ||
+    req.status === "failed" ||
+    req.status === "cancelled"
+  ) {
     return null;
   }
   const store = getSignFlowStore();
   const appSettings = await store.getAppSettings();
+  const outbound = mergeOutboundDelivery(appSettings);
   const reminderSchedule = mergeReminderSchedule(appSettings);
   if (req.reminderCount >= reminderSchedule.maxAutoReminders) {
     req.manualFollowUp = true;
@@ -452,10 +530,10 @@ export async function runReminderForRequest(req: SigningRequest): Promise<Signin
   if (!next || next.getTime() > Date.now()) return null;
 
   const sentAt = new Date(req.sentAt);
-  if (req.phone && req.sentViaSms) {
+  if (req.phone && req.sentViaSms && outbound.signingSmsEnabled) {
     await sendSms(req.phone, reminderSmsFromSettings(appSettings, req.clientName, req.signingUrl));
   }
-  if (req.email && req.sentViaEmail) {
+  if (req.email && req.sentViaEmail && outbound.signingEmailEnabled) {
     const { subject, text, html } = reminderEmailFromSettings(appSettings, req.clientName, req.signingUrl);
     const mail = await sendTransactionalEmail({ to: req.email, subject, textBody: text, htmlBody: html });
     if (!mail.ok) {

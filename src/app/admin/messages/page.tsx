@@ -1,9 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, startTransition } from "react";
-import type { AppSettings, CommunicationTemplates, CompletionNotificationSettings, ReminderScheduleSettings } from "@/types/models";
+import type {
+  AppSettings,
+  CommunicationTemplates,
+  CompletionNotificationSettings,
+  OutboundDeliverySettings,
+  ReminderScheduleSettings,
+} from "@/types/models";
 import { DEFAULT_COMMUNICATION_TEMPLATES, applyTemplateString } from "@/lib/messaging";
 import { DEFAULT_COMPLETION_NOTIFICATIONS } from "@/lib/completion-notifications";
+import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 import { buildBrandedEmailHtml, splitEmailBodyAroundUrl } from "@/lib/email-html-layout";
 import { DEFAULT_REMINDER_SCHEDULE } from "@/lib/reminder-schedule";
 
@@ -26,9 +33,14 @@ function mergeRem(base: AppSettings | null): ReminderScheduleSettings {
   return { ...DEFAULT_REMINDER_SCHEDULE, ...(base?.reminderSchedule ?? {}) };
 }
 
+function mergeOutbound(base: AppSettings | null): OutboundDeliverySettings {
+  return { ...DEFAULT_OUTBOUND_DELIVERY, ...(base?.outboundDelivery ?? {}) };
+}
+
 export default function AdminMessagesPage() {
   const [comm, setComm] = useState<CommunicationTemplates>(DEFAULT_COMMUNICATION_TEMPLATES);
   const [completion, setCompletion] = useState<CompletionNotificationSettings>(DEFAULT_COMPLETION_NOTIFICATIONS);
+  const [outbound, setOutbound] = useState<OutboundDeliverySettings>(DEFAULT_OUTBOUND_DELIVERY);
   const [rem, setRem] = useState<ReminderScheduleSettings>(DEFAULT_REMINDER_SCHEDULE);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -46,6 +58,7 @@ export default function AdminMessagesPage() {
     startTransition(() => {
       setComm(mergeComm(j.item));
       setCompletion(mergeCompletion(j.item));
+      setOutbound(mergeOutbound(j.item));
       setRem(mergeRem(j.item));
       setError(null);
     });
@@ -151,7 +164,12 @@ export default function AdminMessagesPage() {
       method: "PATCH",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ communicationTemplates: comm, completionNotifications: completion, reminderSchedule: rem }),
+      body: JSON.stringify({
+        communicationTemplates: comm,
+        completionNotifications: completion,
+        outboundDelivery: outbound,
+        reminderSchedule: rem,
+      }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -163,6 +181,7 @@ export default function AdminMessagesPage() {
     startTransition(() => {
       setComm(mergeComm(j.item));
       setCompletion(mergeCompletion(j.item));
+      setOutbound(mergeOutbound(j.item));
       setRem(mergeRem(j.item));
       setSavedAt(new Date().toISOString());
       setError(null);
@@ -194,6 +213,34 @@ export default function AdminMessagesPage() {
 
       <div className="grid gap-8 lg:grid-cols-2">
         <div className="space-y-6">
+          <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">Signing request delivery</h2>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">
+              Controls SMS and email when <strong>sending signing links</strong> to clients (new requests, resends, and
+              reminders). Does <strong>not</strong> affect thank-you SMS or team emails after a document is signed.
+            </p>
+            <label className="mt-4 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={outbound.signingSmsEnabled}
+                onChange={(e) => setOutbound((o) => ({ ...o, signingSmsEnabled: e.target.checked }))}
+              />
+              Allow SMS for signing requests
+            </label>
+            <label className="mt-2 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={outbound.signingEmailEnabled}
+                onChange={(e) => setOutbound((o) => ({ ...o, signingEmailEnabled: e.target.checked }))}
+              />
+              Allow email for signing requests
+            </label>
+            {!outbound.signingSmsEnabled && !outbound.signingEmailEnabled ? (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                Both channels are off — staff cannot send signing requests until at least one is enabled.
+              </p>
+            ) : null}
+          </section>
           <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-900">Firm & logo</h2>
             <p className="mt-1 text-xs leading-relaxed text-slate-600">

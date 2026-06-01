@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, startTransition } from "react";
 import { format } from "date-fns";
-import type { Lead, SigningEvent, SigningRequest, SigningStatus } from "@/types/models";
+import type { Lead, OutboundDeliverySettings, SigningEvent, SigningRequest, SigningStatus } from "@/types/models";
+import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 import { postSigningResend } from "@/lib/post-signing-resend";
 import { StatusChip } from "@/components/sign-flow/status-chip";
 
 export default function SigningRequestDetailPage() {
+  const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = String(params.id);
   const [item, setItem] = useState<SigningRequest | null>(null);
@@ -18,6 +20,12 @@ export default function SigningRequestDetailPage() {
   const [feedback, setFeedback] = useState<{ text: string; ok: boolean } | null>(null);
   const [resendBusy, setResendBusy] = useState<"sms" | "email" | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [purgeBusy, setPurgeBusy] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [outbound, setOutbound] = useState<OutboundDeliverySettings>(DEFAULT_OUTBOUND_DELIVERY);
+
+  const isCancelled = item?.status === "cancelled";
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/signing-requests/${id}`, { credentials: "include" });
@@ -39,6 +47,27 @@ export default function SigningRequestDetailPage() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    void (async () => {
+      const meRes = await fetch("/api/auth/me", { credentials: "include" });
+      if (meRes.ok) {
+        const me = (await meRes.json()) as { isAdmin?: boolean };
+        startTransition(() => setIsAdmin(Boolean(me.isAdmin)));
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/app-settings", { credentials: "include" });
+      if (!res.ok) return;
+      const j = (await res.json()) as { item?: { outboundDelivery?: OutboundDeliverySettings } | null };
+      startTransition(() =>
+        setOutbound({ ...DEFAULT_OUTBOUND_DELIVERY, ...(j.item?.outboundDelivery ?? {}) }),
+      );
+    })();
+  }, []);
 
   if (error || !item) {
     return (
@@ -123,7 +152,9 @@ export default function SigningRequestDetailPage() {
           <h2 className="text-sm font-semibold text-slate-900">Actions</h2>
           <button
             type="button"
-            disabled={!item.signingUrl || !item.phone?.trim() || resendBusy !== null}
+            disabled={
+              isCancelled || !item.signingUrl || !item.phone?.trim() || !outbound.signingSmsEnabled || resendBusy !== null
+            }
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             onClick={async () => {
               setFeedback(null);
@@ -138,7 +169,13 @@ export default function SigningRequestDetailPage() {
           </button>
           <button
             type="button"
-            disabled={!item.signingUrl || !item.email?.trim() || resendBusy !== null}
+            disabled={
+              isCancelled ||
+              !item.signingUrl ||
+              !item.email?.trim() ||
+              !outbound.signingEmailEnabled ||
+              resendBusy !== null
+            }
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             onClick={async () => {
               setFeedback(null);
@@ -201,6 +238,78 @@ export default function SigningRequestDetailPage() {
           >
             Post to Slack
           </button>
+          {!isCancelled && item.status !== "completed" ? (
+            <button
+              type="button"
+              disabled={cancelBusy}
+              className="w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 hover:bg-amber-100 disabled:opacity-40"
+              onClick={async () => {
+                if (
+                  !window.confirm(
+                    `Cancel this signing request for ${item.clientName}? It will stay on the list as cancelled and reminders will stop.`,
+                  )
+                ) {
+                  return;
+                }
+                setFeedback(null);
+                setCancelBusy(true);
+                const res = await fetch(`/api/signing-requests/${id}/cancel`, {
+                  method: "POST",
+                  credentials: "include",
+                });
+                setCancelBusy(false);
+                if (!res.ok) {
+                  const j = (await res.json().catch(() => null)) as { error?: string } | null;
+                  setFeedback({ ok: false, text: j?.error ?? "Could not cancel request." });
+                  return;
+                }
+                setFeedback({ ok: true, text: "Request cancelled." });
+                void refresh();
+              }}
+            >
+              {cancelBusy ? "Cancelling…" : "Cancel request"}
+            </button>
+          ) : null}
+          {isAdmin ? (
+            <button
+              type="button"
+              disabled={purgeBusy}
+              className="w-full rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-950 hover:bg-rose-100 disabled:opacity-40"
+              onClick={async () => {
+                if (
+                  !window.confirm(
+                    `Permanently delete this signing request for ${item.clientName}? It will be removed completely from Sign Flow. This cannot be undone.`,
+                  )
+                ) {
+                  return;
+                }
+                setFeedback(null);
+                setPurgeBusy(true);
+                const res = await fetch(`/api/signing-requests/${id}`, {
+                  method: "DELETE",
+                  credentials: "include",
+                });
+                setPurgeBusy(false);
+                if (!res.ok) {
+                  const j = (await res.json().catch(() => null)) as { error?: string } | null;
+                  setFeedback({ ok: false, text: j?.error ?? "Could not delete request." });
+                  return;
+                }
+                router.push("/dashboard");
+              }}
+            >
+              {purgeBusy ? "Deleting…" : "Delete permanently (admin)"}
+            </button>
+          ) : null}
+          {isCancelled ? (
+            <p className="text-xs text-slate-500">Cancelled — no further reminders or resends.</p>
+          ) : item.status === "completed" ? (
+            <p className="text-xs text-slate-500">Completed requests cannot be cancelled.</p>
+          ) : (
+            <p className="text-xs text-slate-500">
+              Cancel keeps the request on the dashboard. Admins can delete permanently.
+            </p>
+          )}
         </div>
       </div>
 

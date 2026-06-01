@@ -18,6 +18,8 @@ export interface SignFlowStore {
   getSigningRequest(id: string): Promise<SigningRequest | null>;
   listSigningRequests(): Promise<SigningRequest[]>;
   upsertSigningRequest(doc: SigningRequest): Promise<void>;
+  /** Permanently remove request and its events (admin only). */
+  purgeSigningRequest(signingRequestId: string): Promise<void>;
   /** Find signing request by DocuSeal submission id. */
   findSigningRequestByDocusealSubmissionId(submissionId: number): Promise<SigningRequest | null>;
 

@@ -44,6 +44,28 @@ export function docusealHeaders(): HeadersInit {
   };
 }
 
+/** Human-readable error when DocuSeal (or Railway in front of it) returns non-2xx. */
+export async function docusealApiError(res: Response, action: string, requestUrl?: string): Promise<string> {
+  const text = await res.text();
+  let message = text.slice(0, 400);
+  try {
+    const j = JSON.parse(text) as { message?: string };
+    if (j?.message) message = j.message;
+  } catch {
+    /* keep raw */
+  }
+
+  const url = requestUrl ?? docusealBaseUrl();
+  if (res.status === 404 && /application not found/i.test(message)) {
+    return (
+      `DocuSeal ${action} failed: Railway returned "Application not found" for ${url}. ` +
+      "That hostname is not a live deployment — open Railway → your DocuSeal service → Settings → Networking and copy the current public URL into DOCUSEAL_API_URL (and DOCUSEAL_ADMIN_BASE_URL) on Vercel, then redeploy Sign Flow."
+    );
+  }
+
+  return `DocuSeal ${action} failed (${res.status}) calling ${requestUrl ?? "DocuSeal API"}: ${message}`;
+}
+
 export type DocuSealTemplateRow = {
   id: number;
   name: string;
@@ -67,8 +89,9 @@ export type DocuSealSubmitterRow = {
 };
 
 export async function listTemplates(): Promise<DocuSealTemplateRow[]> {
-  const res = await fetch(docusealApiRequestUrl("/templates"), { headers: docusealHeaders(), cache: "no-store" });
-  if (!res.ok) throw new Error(`DocuSeal list templates failed: ${res.status} ${await res.text()}`);
+  const url = docusealApiRequestUrl("/templates");
+  const res = await fetch(url, { headers: docusealHeaders(), cache: "no-store" });
+  if (!res.ok) throw new Error(await docusealApiError(res, "list templates", url));
   const data = (await res.json()) as unknown;
   if (Array.isArray(data)) return data as DocuSealTemplateRow[];
   const wrapped = data as { data?: unknown };
@@ -77,30 +100,33 @@ export async function listTemplates(): Promise<DocuSealTemplateRow[]> {
 }
 
 export async function getTemplate(templateId: number): Promise<DocuSealTemplateRow> {
-  const res = await fetch(docusealApiRequestUrl(`/templates/${templateId}`), {
+  const url = docusealApiRequestUrl(`/templates/${templateId}`);
+  const res = await fetch(url, {
     headers: docusealHeaders(),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`DocuSeal get template failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(await docusealApiError(res, "get template", url));
   return (await res.json()) as DocuSealTemplateRow;
 }
 
 /** Full template JSON from DocuSeal (schema, fields, etc.). */
 export async function getTemplateJson(templateId: number): Promise<unknown> {
-  const res = await fetch(docusealApiRequestUrl(`/templates/${templateId}`), {
+  const url = docusealApiRequestUrl(`/templates/${templateId}`);
+  const res = await fetch(url, {
     headers: docusealHeaders(),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`DocuSeal get template failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(await docusealApiError(res, "get template", url));
   return res.json();
 }
 
 export async function listTemplateDocuments(templateId: number): Promise<unknown> {
-  const res = await fetch(docusealApiRequestUrl(`/templates/${templateId}/documents`), {
+  const url = docusealApiRequestUrl(`/templates/${templateId}/documents`);
+  const res = await fetch(url, {
     headers: docusealHeaders(),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`DocuSeal list template documents failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(await docusealApiError(res, "list template documents", url));
   return res.json();
 }
 
@@ -143,23 +169,25 @@ export async function createSubmission(input: CreateSubmissionInput): Promise<Do
     submitters: [submitter],
   };
 
-  const res = await fetch(docusealApiRequestUrl("/submissions"), {
+  const url = docusealApiRequestUrl("/submissions");
+  const res = await fetch(url, {
     method: "POST",
     headers: docusealHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`DocuSeal create submission failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(await docusealApiError(res, "create submission", url));
   const data = (await res.json()) as unknown;
   if (!Array.isArray(data)) throw new Error("DocuSeal create submission returned unexpected shape.");
   return data as DocuSealSubmitterRow[];
 }
 
 export async function getSubmission(submissionId: number): Promise<unknown> {
-  const res = await fetch(docusealApiRequestUrl(`/submissions/${submissionId}`), {
+  const url = docusealApiRequestUrl(`/submissions/${submissionId}`);
+  const res = await fetch(url, {
     headers: docusealHeaders(),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`DocuSeal get submission failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(await docusealApiError(res, "get submission", url));
   return res.json();
 }
 

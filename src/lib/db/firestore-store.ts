@@ -60,6 +60,19 @@ export class FirestoreSignFlowStore implements SignFlowStore {
     await col<SigningRequest>(this.db, "signingRequests").doc(doc.id).set(doc, { merge: true });
   }
 
+  async purgeSigningRequest(signingRequestId: string): Promise<void> {
+    const eventsSnap = await this.db
+      .collection("signingEvents")
+      .where("signingRequestId", "==", signingRequestId)
+      .get();
+    const batch = this.db.batch();
+    for (const doc of eventsSnap.docs) {
+      batch.delete(doc.ref);
+    }
+    batch.delete(col<SigningRequest>(this.db, "signingRequests").doc(signingRequestId));
+    await batch.commit();
+  }
+
   async findSigningRequestByDocusealSubmissionId(submissionId: number): Promise<SigningRequest | null> {
     const snap = await this.db
       .collection("signingRequests")

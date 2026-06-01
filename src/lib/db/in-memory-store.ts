@@ -46,6 +46,13 @@ export class InMemorySignFlowStore implements SignFlowStore {
     this.signingRequests.set(doc.id, doc);
   }
 
+  async purgeSigningRequest(signingRequestId: string): Promise<void> {
+    this.signingRequests.delete(signingRequestId);
+    for (const [id, ev] of this.signingEvents) {
+      if (ev.signingRequestId === signingRequestId) this.signingEvents.delete(id);
+    }
+  }
+
   async findSigningRequestByDocusealSubmissionId(submissionId: number): Promise<SigningRequest | null> {
     for (const r of this.signingRequests.values()) {
       if (r.docusealSubmissionId === submissionId) return r;

@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, startTransition } from "react";
-import type { DocuSealTemplateSummary } from "@/types/models";
+import type { DocuSealTemplateSummary, OutboundDeliverySettings } from "@/types/models";
+import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 
 export default function SendSigningRequestPage() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function SendSigningRequestPage() {
   const [error, setError] = useState<string | null>(null);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [quoReady, setQuoReady] = useState<boolean | null>(null);
+  const [outbound, setOutbound] = useState<OutboundDeliverySettings>(DEFAULT_OUTBOUND_DELIVERY);
 
   async function loadTemplates() {
     setLoadingTemplates(true);
@@ -46,13 +48,23 @@ export default function SendSigningRequestPage() {
       const res = await fetch("/api/app-settings", { credentials: "include" });
       if (!res.ok) return;
       const j = (await res.json()) as {
+        item?: { outboundDelivery?: OutboundDeliverySettings } | null;
         env?: { hasQuoApiKey?: boolean; hasQuoFromNumber?: boolean };
       };
       const e = j.env;
-      if (!e) return;
-      startTransition(() => setQuoReady(Boolean(e.hasQuoApiKey && e.hasQuoFromNumber)));
+      const od = { ...DEFAULT_OUTBOUND_DELIVERY, ...(j.item?.outboundDelivery ?? {}) };
+      startTransition(() => {
+        if (e) setQuoReady(Boolean(e.hasQuoApiKey && e.hasQuoFromNumber));
+        setOutbound(od);
+        if (!od.signingSmsEnabled) setSendSms(false);
+        if (!od.signingEmailEnabled) setSendEmail(false);
+        if (od.signingSmsEnabled && !od.signingEmailEnabled) setSendSms(true);
+        if (od.signingEmailEnabled && !od.signingSmsEnabled) setSendEmail(true);
+      });
     })();
   }, []);
+
+  const canDeliver = outbound.signingSmsEnabled || outbound.signingEmailEnabled;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -65,7 +77,14 @@ export default function SendSigningRequestPage() {
 
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">{error}</div> : null}
 
-      {quoReady === false && sendSms ? (
+      {!canDeliver ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+          <strong>Signing delivery is disabled.</strong> An admin must enable SMS and/or email under{" "}
+          <strong>Admin → Messages → Signing request delivery</strong> before you can send requests.
+        </div>
+      ) : null}
+
+      {quoReady === false && sendSms && outbound.signingSmsEnabled ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
           <strong>SMS will not send</strong> until <code className="text-xs">QUO_API_KEY</code> and{" "}
           <code className="text-xs">QUO_FROM_NUMBER</code> (or <code className="text-xs">QUO_PHONE_NUMBER_ID</code>) are
@@ -84,6 +103,16 @@ export default function SendSigningRequestPage() {
           const tid = Number(templateId);
           if (!Number.isFinite(tid) || tid <= 0) {
             setError("Select a template.");
+            setBusy(false);
+            return;
+          }
+          if (!canDeliver) {
+            setError("SMS and email for signing requests are both disabled in admin settings.");
+            setBusy(false);
+            return;
+          }
+          if (!sendSms && !sendEmail) {
+            setError("Select at least one delivery method.");
             setBusy(false);
             return;
           }
@@ -192,14 +221,22 @@ export default function SendSigningRequestPage() {
 
         <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
           <div className="text-sm font-semibold text-slate-900">Delivery</div>
-          <label className="mt-3 flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
-            SMS
-          </label>
-          <label className="mt-2 flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
-            Email
-          </label>
+          {outbound.signingSmsEnabled ? (
+            <label className="mt-3 flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
+              SMS
+            </label>
+          ) : (
+            <p className="mt-3 text-xs text-slate-500">SMS is disabled for signing requests (admin settings).</p>
+          )}
+          {outbound.signingEmailEnabled ? (
+            <label className="mt-2 flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
+              Email
+            </label>
+          ) : (
+            <p className="mt-2 text-xs text-slate-500">Email is disabled for signing requests (admin settings).</p>
+          )}
         </div>
 
         <label className="flex items-center gap-2 text-sm font-medium text-slate-900">
@@ -208,7 +245,7 @@ export default function SendSigningRequestPage() {
         </label>
 
         <button
-          disabled={busy}
+          disabled={busy || !canDeliver}
           type="submit"
           className="w-full rounded-xl bg-[color:var(--accent)] px-4 py-3 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
         >

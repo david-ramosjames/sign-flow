@@ -11,17 +11,25 @@ const nav = [
   { href: "/admin", label: "Admin" },
 ];
 
+type SessionUser = { name: string; email?: string };
+
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const [showSignOut, setShowSignOut] = useState(false);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const res = await fetch("/api/auth/me", { credentials: "include" });
-      if (!res.ok || cancelled) return;
-      const j = (await res.json()) as { authRequired?: boolean };
-      if (j.authRequired) startTransition(() => setShowSignOut(true));
+      if (cancelled) return;
+      if (res.ok) {
+        const j = (await res.json()) as { user?: SessionUser | null };
+        startTransition(() => setUser(j.user ?? null));
+      } else {
+        startTransition(() => setUser(null));
+      }
+      startTransition(() => setAuthChecked(true));
     })();
     return () => {
       cancelled = true;
@@ -64,18 +72,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
           <div className="flex shrink-0 items-center gap-2">
-            {showSignOut ? (
-              <button
-                className="rounded-lg px-3 py-2 text-sm text-white/90 hover:bg-white/10"
-                type="button"
-                onClick={async () => {
-                  await signOutFirebaseClient();
-                  await fetch("/api/auth/logout", { method: "POST" });
-                  window.location.href = "/login";
-                }}
-              >
-                Sign out
-              </button>
+            {authChecked && user ? (
+              <>
+                <span
+                  className="hidden max-w-[200px] truncate text-sm text-white/90 sm:inline"
+                  title={user.email ?? user.name}
+                >
+                  {user.name}
+                </span>
+                <button
+                  className="rounded-lg px-3 py-2 text-sm text-white/90 hover:bg-white/10"
+                  type="button"
+                  onClick={async () => {
+                    await signOutFirebaseClient();
+                    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+                    window.location.href = "/login";
+                  }}
+                >
+                  Sign out
+                </button>
+              </>
+            ) : null}
+            {authChecked && !user ? (
+              <Link href="/login" className="rounded-lg px-3 py-2 text-sm font-medium text-white hover:bg-white/10">
+                Sign in
+              </Link>
             ) : null}
           </div>
         </div>

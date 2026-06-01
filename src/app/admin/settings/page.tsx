@@ -54,7 +54,9 @@ export default function AdminSettingsPage() {
         </ul>
         <div className="mt-4 text-xs text-slate-600">
           Staff auth: <code>NEXT_PUBLIC_FIREBASE_*</code>, <code>SIGNFLOW_SESSION_SECRET</code>, Firebase Admin env vars,
-          optional <code>SIGNFLOW_ALLOWED_GOOGLE_EMAILS</code>. DocuSeal: <code>DOCUSEAL_API_URL</code>,{" "}
+          optional <code>SIGNFLOW_ALLOWED_GOOGLE_EMAILS</code> (emails or domains like{" "}
+          <code className="text-xs">ramosjames.com</code>), admin deletes via <code>SIGNFLOW_ADMIN_EMAILS</code>.
+          DocuSeal: <code>DOCUSEAL_API_URL</code>,{" "}
           <code>DOCUSEAL_API_KEY</code>, optional <code>DOCUSEAL_WEBHOOK_SECRET</code>, <code>DOCUSEAL_ADMIN_BASE_URL</code>.
           Quo SMS: <code>QUO_API_KEY</code>, <code>QUO_FROM_NUMBER</code> or <code>QUO_PHONE_NUMBER_ID</code> (optional{" "}
           <code>QUO_USER_ID</code>). Email:

@@ -21,7 +21,15 @@ export type Lead = {
   status: LeadStatus;
 };
 
-export type SigningStatus = "draft" | "sent" | "viewed" | "completed" | "signed" | "expired" | "failed";
+export type SigningStatus =
+  | "draft"
+  | "sent"
+  | "viewed"
+  | "completed"
+  | "signed"
+  | "expired"
+  | "failed"
+  | "cancelled";
 
 export type DeliveryMethod = "sms" | "email";
 
@@ -36,6 +44,8 @@ export type SigningEventType =
   | "slack_posted"
   | "reminder_sent"
   | "synced"
+  | "cancelled"
+  | "deleted"
   | "failed";
 
 export type SigningRequest = {
@@ -75,6 +85,8 @@ export type SigningRequest = {
   lastActivityAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Legacy soft-hide; prefer `status: "cancelled"`. Still honored when reading old rows. */
+  deletedAt?: string | null;
 };
 
 export type SigningEvent = {
@@ -123,6 +135,12 @@ export type CompletionNotificationSettings = {
   teamCompletedEmailBodyTemplate: string;
 };
 
+/** Client-facing signing link delivery (initial send, resend, reminders). Not completion/team notifications. */
+export type OutboundDeliverySettings = {
+  signingSmsEnabled: boolean;
+  signingEmailEnabled: boolean;
+};
+
 /** Drives `computeNextReminderAt` when present on `AppSettings`. */
 export type ReminderScheduleSettings = {
   firstReminderAfterSendMinutes: number;
@@ -144,4 +162,6 @@ export type AppSettings = {
   communicationTemplates?: CommunicationTemplates | null;
   reminderSchedule?: ReminderScheduleSettings | null;
   completionNotifications?: CompletionNotificationSettings | null;
+  /** Admin toggles for SMS/email when sending signing requests to clients. */
+  outboundDelivery?: OutboundDeliverySettings | null;
 };

@@ -1,3 +1,4 @@
+import { isActiveSigningRequest } from "@/lib/signing-request-active";
 import { applyDocusealCompletionToRequest, markSigningViewedFromWebhook } from "@/server/signing-workflow";
 import { getSignFlowStore } from "@/lib/db";
 import { appendSigningEvent } from "@/services/signing-events";
@@ -47,8 +48,8 @@ export async function processDocusealWebhookJson(payload: unknown): Promise<void
   if (isDocusealCompletionEvent(eventType)) {
     const store = getSignFlowStore();
     const req = await store.findSigningRequestByDocusealSubmissionId(submissionId);
-    if (!req) {
-      console.warn("[docuseal-webhook] no signing request for submission", { submissionId, eventType });
+    if (!req || !isActiveSigningRequest(req)) {
+      console.warn("[docuseal-webhook] no active signing request for submission", { submissionId, eventType });
       return;
     }
 
@@ -64,7 +65,7 @@ export async function processDocusealWebhookJson(payload: unknown): Promise<void
   if (eventType === "form.declined") {
     const store = getSignFlowStore();
     const req = await store.findSigningRequestByDocusealSubmissionId(submissionId);
-    if (!req) return;
+    if (!req || !isActiveSigningRequest(req)) return;
 
     req.status = "failed";
     req.updatedAt = new Date().toISOString();
@@ -81,7 +82,7 @@ export async function processDocusealWebhookJson(payload: unknown): Promise<void
   if (eventType === "submission.expired") {
     const store = getSignFlowStore();
     const req = await store.findSigningRequestByDocusealSubmissionId(submissionId);
-    if (!req) return;
+    if (!req || !isActiveSigningRequest(req)) return;
     req.status = "expired";
     req.reminderEnabled = false;
     req.nextReminderAt = null;

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
+import { isSignFlowAdmin } from "@/lib/auth/is-admin";
 import { getSessionUser, isSignFlowAuthRequired } from "@/lib/auth/get-session";
 
 export async function GET() {
   const authRequired = isSignFlowAuthRequired();
   const u = await getSessionUser();
-  if (!u) return NextResponse.json({ user: null, authRequired }, { status: 401 });
-  return NextResponse.json({ user: u, authRequired });
+  if (!u) return NextResponse.json({ user: null, authRequired, isAdmin: false }, { status: 401 });
+  return NextResponse.json({ user: u, authRequired, isAdmin: isSignFlowAdmin(u.email) });
 }

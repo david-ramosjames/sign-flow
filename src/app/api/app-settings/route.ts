@@ -8,6 +8,7 @@ import { isGmailWorkspaceDelegationConfigured } from "@/services/gmail-workspace
 import { DEFAULT_COMMUNICATION_TEMPLATES } from "@/lib/messaging";
 import { DEFAULT_REMINDER_SCHEDULE } from "@/lib/reminder-schedule";
 import { DEFAULT_COMPLETION_NOTIFICATIONS } from "@/lib/completion-notifications";
+import { DEFAULT_OUTBOUND_DELIVERY, mergeOutboundDelivery } from "@/lib/outbound-delivery";
 
 const communicationTemplatesPatchSchema = z
   .object({
@@ -42,6 +43,13 @@ const completionNotificationsPatchSchema = z
   })
   .optional();
 
+const outboundDeliveryPatchSchema = z
+  .object({
+    signingSmsEnabled: z.boolean().optional(),
+    signingEmailEnabled: z.boolean().optional(),
+  })
+  .optional();
+
 const patchSchema = z.object({
   docusealConfigured: z.boolean().optional(),
   smsConfigured: z.boolean().optional(),
@@ -51,6 +59,7 @@ const patchSchema = z.object({
   communicationTemplates: communicationTemplatesPatchSchema,
   reminderSchedule: reminderSchedulePatchSchema,
   completionNotifications: completionNotificationsPatchSchema,
+  outboundDelivery: outboundDeliveryPatchSchema,
 });
 
 export async function GET() {
@@ -61,8 +70,11 @@ export async function GET() {
   }
   const store = getSignFlowStore();
   const existing = await store.getAppSettings();
+  const item = existing
+    ? { ...existing, outboundDelivery: mergeOutboundDelivery(existing) }
+    : null;
   return NextResponse.json({
-    item: existing,
+    item,
     env: {
       hasDocusealApiKey: Boolean(process.env.DOCUSEAL_API_KEY),
       hasDocusealApiUrl: Boolean(process.env.DOCUSEAL_API_URL),
@@ -110,8 +122,13 @@ export async function PATCH(req: Request) {
       updatedAt: nowIso(),
     } satisfies AppSettings);
 
-  const { communicationTemplates: ctPatch, reminderSchedule: rsPatch, completionNotifications: cnPatch, ...flagPatches } =
-    parsed.data;
+  const {
+    communicationTemplates: ctPatch,
+    reminderSchedule: rsPatch,
+    completionNotifications: cnPatch,
+    outboundDelivery: odPatch,
+    ...flagPatches
+  } = parsed.data;
 
   const updated: AppSettings = {
     ...existing,
@@ -141,6 +158,15 @@ export async function PATCH(req: Request) {
       ...cnPatch,
     };
   }
+  if (odPatch !== undefined) {
+    updated.outboundDelivery = {
+      ...DEFAULT_OUTBOUND_DELIVERY,
+      ...(existing.outboundDelivery ?? {}),
+      ...odPatch,
+    };
+  }
   await store.upsertAppSettings(updated);
-  return NextResponse.json({ item: updated });
+  return NextResponse.json({
+    item: { ...updated, outboundDelivery: mergeOutboundDelivery(updated) },
+  });
 }

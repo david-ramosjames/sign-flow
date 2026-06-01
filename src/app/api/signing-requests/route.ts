@@ -3,6 +3,8 @@ import { z } from "zod";
 import { getSignFlowStore } from "@/lib/db";
 import { isFirestoreNotProvisionedError } from "@/lib/db/firestore-errors";
 import { requireSessionUser } from "@/lib/auth/get-session";
+import { mergeOutboundDelivery } from "@/lib/outbound-delivery";
+import { normalizeSigningRequestForDisplay } from "@/lib/signing-request-active";
 import { createLeadAndSigningRequest } from "@/server/signing-workflow";
 
 const postSchema = z.object({
@@ -28,7 +30,7 @@ export async function GET() {
   }
   const store = getSignFlowStore();
   try {
-    const items = await store.listSigningRequests();
+    const items = (await store.listSigningRequests()).map(normalizeSigningRequestForDisplay);
     const leads = await store.listLeads();
     const leadsById = Object.fromEntries(leads.map((l) => [l.id, l]));
     return NextResponse.json({ items, leadsById, store: store.isMock ? "mock" : "firestore" });
@@ -68,6 +70,21 @@ export async function POST(req: Request) {
   }
   if (parsed.data.sendEmail && !email) {
     return NextResponse.json({ error: "Email is required when email delivery is selected." }, { status: 400 });
+  }
+
+  const appSettings = await getSignFlowStore().getAppSettings();
+  const outbound = mergeOutboundDelivery(appSettings);
+  if (parsed.data.sendSms && !outbound.signingSmsEnabled) {
+    return NextResponse.json(
+      { error: "SMS for signing requests is disabled in Admin → Messages." },
+      { status: 400 },
+    );
+  }
+  if (parsed.data.sendEmail && !outbound.signingEmailEnabled) {
+    return NextResponse.json(
+      { error: "Email for signing requests is disabled in Admin → Messages." },
+      { status: 400 },
+    );
   }
 
   try {
