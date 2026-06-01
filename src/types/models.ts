@@ -35,6 +35,7 @@ export type SigningEventType =
   | "dropbox_saved"
   | "slack_posted"
   | "reminder_sent"
+  | "synced"
   | "failed";
 
 export type SigningRequest = {
@@ -112,6 +113,16 @@ export type CommunicationTemplates = {
   reminderEmailBodyTemplate: string;
 };
 
+/** Sent when DocuSeal marks a submission completed. Editable in Admin → Messages. */
+export type CompletionNotificationSettings = {
+  thankYouSmsEnabled: boolean;
+  thankYouSmsTemplate: string;
+  /** Comma- or newline-separated team inboxes notified on completion. */
+  teamNotificationEmails: string;
+  teamCompletedEmailSubjectTemplate: string;
+  teamCompletedEmailBodyTemplate: string;
+};
+
 /** Drives `computeNextReminderAt` when present on `AppSettings`. */
 export type ReminderScheduleSettings = {
   firstReminderAfterSendMinutes: number;
@@ -132,4 +143,5 @@ export type AppSettings = {
   /** Editable from Admin → Messages & reminders; merged with code defaults when absent. */
   communicationTemplates?: CommunicationTemplates | null;
   reminderSchedule?: ReminderScheduleSettings | null;
+  completionNotifications?: CompletionNotificationSettings | null;
 };

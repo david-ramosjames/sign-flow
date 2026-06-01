@@ -68,8 +68,9 @@ export default function SendSigningRequestPage() {
       {quoReady === false && sendSms ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
           <strong>SMS will not send</strong> until <code className="text-xs">QUO_API_KEY</code> and{" "}
-          <code className="text-xs">QUO_FROM_NUMBER</code> are set in your server environment (then restart the app). US
-          numbers require Quo carrier (A2P) registration. For local testing without Quo, set{" "}
+          <code className="text-xs">QUO_FROM_NUMBER</code> (or <code className="text-xs">QUO_PHONE_NUMBER_ID</code>) are
+          set — use a number from your Quo workspace, not another provider. US numbers require Quo carrier (A2P)
+          registration. For local testing without Quo, set{" "}
           <code className="text-xs">QUO_SMS_MOCK=true</code> or uncheck SMS and use email only.
         </div>
       ) : null}

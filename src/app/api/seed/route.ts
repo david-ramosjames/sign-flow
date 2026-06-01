@@ -19,7 +19,9 @@ export async function POST() {
     const settings: AppSettings = {
       id: "default",
       docusealConfigured: Boolean(process.env.DOCUSEAL_API_KEY),
-      smsConfigured: Boolean(process.env.QUO_API_KEY && process.env.QUO_FROM_NUMBER),
+      smsConfigured: Boolean(
+        process.env.QUO_API_KEY && (process.env.QUO_FROM_NUMBER || process.env.QUO_PHONE_NUMBER_ID),
+      ),
       dropboxConfigured: Boolean(process.env.DROPBOX_ACCESS_TOKEN),
       slackWebhookConfigured: Boolean(process.env.SLACK_WEBHOOK_URL),
       emailConfigured: Boolean(

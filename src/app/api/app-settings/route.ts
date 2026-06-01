@@ -7,6 +7,7 @@ import type { AppSettings } from "@/types/models";
 import { isGmailWorkspaceDelegationConfigured } from "@/services/gmail-workspace-dwd";
 import { DEFAULT_COMMUNICATION_TEMPLATES } from "@/lib/messaging";
 import { DEFAULT_REMINDER_SCHEDULE } from "@/lib/reminder-schedule";
+import { DEFAULT_COMPLETION_NOTIFICATIONS } from "@/lib/completion-notifications";
 
 const communicationTemplatesPatchSchema = z
   .object({
@@ -31,6 +32,16 @@ const reminderSchedulePatchSchema = z
   })
   .optional();
 
+const completionNotificationsPatchSchema = z
+  .object({
+    thankYouSmsEnabled: z.boolean().optional(),
+    thankYouSmsTemplate: z.string().min(1).optional(),
+    teamNotificationEmails: z.string().optional(),
+    teamCompletedEmailSubjectTemplate: z.string().min(1).optional(),
+    teamCompletedEmailBodyTemplate: z.string().min(1).optional(),
+  })
+  .optional();
+
 const patchSchema = z.object({
   docusealConfigured: z.boolean().optional(),
   smsConfigured: z.boolean().optional(),
@@ -39,6 +50,7 @@ const patchSchema = z.object({
   emailConfigured: z.boolean().optional(),
   communicationTemplates: communicationTemplatesPatchSchema,
   reminderSchedule: reminderSchedulePatchSchema,
+  completionNotifications: completionNotificationsPatchSchema,
 });
 
 export async function GET() {
@@ -65,7 +77,7 @@ export async function GET() {
       hasGoogleClientSecret: Boolean(process.env.GOOGLE_CLIENT_SECRET),
       hasSignFlowSessionSecret: Boolean(process.env.SIGNFLOW_SESSION_SECRET),
       hasQuoApiKey: Boolean(process.env.QUO_API_KEY),
-      hasQuoFromNumber: Boolean(process.env.QUO_FROM_NUMBER),
+      hasQuoFromNumber: Boolean(process.env.QUO_FROM_NUMBER || process.env.QUO_PHONE_NUMBER_ID),
       hasGmailWorkspaceDelegation: isGmailWorkspaceDelegationConfigured(),
       hasSendgrid: Boolean(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL),
       hasGmailUserOAuth: Boolean(process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_EMAIL_FROM),
@@ -98,7 +110,8 @@ export async function PATCH(req: Request) {
       updatedAt: nowIso(),
     } satisfies AppSettings);
 
-  const { communicationTemplates: ctPatch, reminderSchedule: rsPatch, ...flagPatches } = parsed.data;
+  const { communicationTemplates: ctPatch, reminderSchedule: rsPatch, completionNotifications: cnPatch, ...flagPatches } =
+    parsed.data;
 
   const updated: AppSettings = {
     ...existing,
@@ -119,6 +132,13 @@ export async function PATCH(req: Request) {
       ...DEFAULT_REMINDER_SCHEDULE,
       ...(existing.reminderSchedule ?? {}),
       ...rsPatch,
+    };
+  }
+  if (cnPatch !== undefined) {
+    updated.completionNotifications = {
+      ...DEFAULT_COMPLETION_NOTIFICATIONS,
+      ...(existing.completionNotifications ?? {}),
+      ...cnPatch,
     };
   }
   await store.upsertAppSettings(updated);

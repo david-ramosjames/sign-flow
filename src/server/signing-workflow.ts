@@ -1,6 +1,16 @@
 import { computeNextReminderAt } from "@/lib/reminder-cadence";
 import { mergeReminderSchedule } from "@/lib/reminder-schedule";
 import {
+  mergeCompletionNotifications,
+  parseEmailList,
+  teamCompletedEmailFromSettings,
+  thankYouSmsFromSettings,
+} from "@/lib/completion-notifications";
+import {
+  extractSubmissionDocumentUrls,
+  submissionIsCompleted,
+} from "@/lib/docuseal-submission";
+import {
   reminderEmailFromSettings,
   reminderSmsFromSettings,
   signingEmailFromSettings,
@@ -8,7 +18,7 @@ import {
 } from "@/lib/messaging";
 import { newId, nowIso } from "@/lib/time";
 import { getSignFlowStore } from "@/lib/db";
-import { createSubmission, downloadUrlToBuffer, getTemplate } from "@/services/docuseal-client";
+import { createSubmission, downloadUrlToBuffer, getSubmission, getTemplate } from "@/services/docuseal-client";
 import { uploadDropboxFile, getDropboxTemporaryLink } from "@/services/dropbox-client";
 import { sendTransactionalEmail } from "@/services/email-delivery";
 import { postSlackMessage } from "@/services/slack-notify";
@@ -240,21 +250,72 @@ export async function postSigningSlackUpdate(signingRequestId: string): Promise<
   await appendSigningEvent({ signingRequestId, leadId: req.leadId, type: "slack_posted", metadata: { manual: true } });
 }
 
+export async function syncSigningRequestFromDocuseal(signingRequestId: string): Promise<SigningRequest> {
+  const store = getSignFlowStore();
+  const req = await store.getSigningRequest(signingRequestId);
+  if (!req) throw new Error("Not found");
+  if (req.docusealSubmissionId == null) throw new Error("No DocuSeal submission id on this request.");
+
+  const raw = await getSubmission(req.docusealSubmissionId);
+  if (!submissionIsCompleted(raw)) {
+    throw new Error("DocuSeal submission is not completed yet.");
+  }
+
+  const { pdf, audit } = extractSubmissionDocumentUrls(raw);
+  await applyDocusealCompletionToRequest({
+    signingRequestId: req.id,
+    signedPdfUrl: pdf,
+    auditCertificateUrl: audit,
+    source: "sync",
+  });
+
+  await appendSigningEvent({
+    signingRequestId: req.id,
+    leadId: req.leadId,
+    type: "synced",
+    metadata: { source: "docuseal" },
+  });
+
+  const updated = await store.getSigningRequest(signingRequestId);
+  if (!updated) throw new Error("Not found");
+  return updated;
+}
+
 export async function applyDocusealCompletionToRequest(input: {
   signingRequestId: string;
   signedPdfUrl: string | null;
   auditCertificateUrl: string | null;
+  source?: "docuseal" | "sync";
 }): Promise<void> {
   const store = getSignFlowStore();
   const req = await store.getSigningRequest(input.signingRequestId);
   if (!req) return;
-  if (req.status === "completed") return;
+
+  const pdf = input.signedPdfUrl ?? null;
+  const audit = input.auditCertificateUrl ?? null;
+
+  if (req.status === "completed") {
+    let changed = false;
+    if (pdf && !req.signedPdfUrl) {
+      req.signedPdfUrl = pdf;
+      changed = true;
+    }
+    if (audit && !req.auditCertificateUrl) {
+      req.auditCertificateUrl = audit;
+      changed = true;
+    }
+    if (changed) {
+      req.updatedAt = nowIso();
+      await store.upsertSigningRequest(req);
+    }
+    return;
+  }
 
   const t = nowIso();
   req.status = "completed";
   req.completedAt = t;
-  req.signedPdfUrl = input.signedPdfUrl ?? req.signedPdfUrl;
-  req.auditCertificateUrl = input.auditCertificateUrl ?? req.auditCertificateUrl;
+  req.signedPdfUrl = pdf ?? req.signedPdfUrl;
+  req.auditCertificateUrl = audit ?? req.auditCertificateUrl;
   req.reminderEnabled = false;
   req.nextReminderAt = null;
   req.manualFollowUp = false;
@@ -273,8 +334,59 @@ export async function applyDocusealCompletionToRequest(input: {
     signingRequestId: req.id,
     leadId: req.leadId,
     type: "signed",
-    metadata: { source: "docuseal" },
+    metadata: { source: input.source ?? "docuseal" },
   });
+
+  const appSettings = await store.getAppSettings();
+  const completionSettings = mergeCompletionNotifications(appSettings);
+  const documentUrl = req.signedPdfUrl ?? req.signingUrl ?? "";
+
+  if (completionSettings.thankYouSmsEnabled && req.phone?.trim()) {
+    try {
+      await sendSms(req.phone, thankYouSmsFromSettings(appSettings, req.clientName));
+      await appendSigningEvent({
+        signingRequestId: req.id,
+        leadId: req.leadId,
+        type: "sms_sent",
+        metadata: { kind: "thank_you" },
+      });
+    } catch (e) {
+      await appendSigningEvent({
+        signingRequestId: req.id,
+        leadId: req.leadId,
+        type: "failed",
+        metadata: { step: "thank_you_sms", error: String(e) },
+      });
+    }
+  }
+
+  const teamEmails = parseEmailList(completionSettings.teamNotificationEmails);
+  if (teamEmails.length > 0) {
+    const { subject, text } = teamCompletedEmailFromSettings(appSettings, {
+      clientName: req.clientName,
+      templateName: req.templateName,
+      documentUrl: documentUrl || "(document link pending — check DocuSeal)",
+    });
+    for (const to of teamEmails) {
+      try {
+        const mail = await sendTransactionalEmail({ to, subject, textBody: text });
+        if (!mail.ok) throw new Error(mail.error);
+        await appendSigningEvent({
+          signingRequestId: req.id,
+          leadId: req.leadId,
+          type: "email_sent",
+          metadata: { kind: "team_completed", to },
+        });
+      } catch (e) {
+        await appendSigningEvent({
+          signingRequestId: req.id,
+          leadId: req.leadId,
+          type: "failed",
+          metadata: { step: "team_completed_email", to, error: String(e) },
+        });
+      }
+    }
+  }
 
   if (process.env.DROPBOX_ACCESS_TOKEN) {
     try {
@@ -290,13 +402,21 @@ export async function applyDocusealCompletionToRequest(input: {
     }
   }
 
-  const latest = await store.getSigningRequest(req.id);
-  const dropOk = Boolean(latest?.dropboxSignedPdfPath);
-
-  await postSlackMessage(
-    `*Sign Flow* — completed signature\n• ${req.clientName}\n• ${req.templateName}\n• Dropbox: ${dropOk ? "saved" : "skipped (no token or error)"}`,
-  );
-  await appendSigningEvent({ signingRequestId: req.id, leadId: req.leadId, type: "slack_posted", metadata: { event: "completed" } });
+  try {
+    const latest = await store.getSigningRequest(req.id);
+    const dropOk = Boolean(latest?.dropboxSignedPdfPath);
+    await postSlackMessage(
+      `*Sign Flow* — completed signature\n• ${req.clientName}\n• ${req.templateName}\n• Dropbox: ${dropOk ? "saved" : "skipped (no token or error)"}`,
+    );
+    await appendSigningEvent({ signingRequestId: req.id, leadId: req.leadId, type: "slack_posted", metadata: { event: "completed" } });
+  } catch (e) {
+    await appendSigningEvent({
+      signingRequestId: req.id,
+      leadId: req.leadId,
+      type: "failed",
+      metadata: { step: "slack", error: String(e) },
+    });
+  }
 }
 
 export async function markSigningViewedFromWebhook(submissionId: number): Promise<void> {

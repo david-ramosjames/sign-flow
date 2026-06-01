@@ -43,12 +43,23 @@ export function mergeCommunicationTemplates(settings: AppSettings | null): Commu
   };
 }
 
-export function applyTemplateString(template: string, vars: { clientName: string; url: string; firm?: string }): string {
+export function applyTemplateString(
+  template: string,
+  vars: {
+    clientName: string;
+    url?: string;
+    firm?: string;
+    templateName?: string;
+    documentUrl?: string;
+  },
+): string {
   const firm = (vars.firm ?? FIRM).trim() || FIRM;
   return template
     .replaceAll("{{clientName}}", vars.clientName)
-    .replaceAll("{{url}}", vars.url)
-    .replaceAll("{{firm}}", firm);
+    .replaceAll("{{url}}", vars.url ?? "")
+    .replaceAll("{{firm}}", firm)
+    .replaceAll("{{templateName}}", vars.templateName ?? "")
+    .replaceAll("{{documentUrl}}", vars.documentUrl ?? "");
 }
 
 export function signingSmsFromSettings(settings: AppSettings | null, clientName: string, url: string): string {

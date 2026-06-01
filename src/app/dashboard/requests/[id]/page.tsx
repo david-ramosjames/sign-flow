@@ -17,6 +17,7 @@ export default function SigningRequestDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ text: string; ok: boolean } | null>(null);
   const [resendBusy, setResendBusy] = useState<"sms" | "email" | null>(null);
+  const [syncBusy, setSyncBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/signing-requests/${id}`, { credentials: "include" });
@@ -149,6 +150,32 @@ export default function SigningRequestDetailPage() {
             }}
           >
             {resendBusy === "email" ? "Sending email…" : "Retry email"}
+          </button>
+          <button
+            type="button"
+            disabled={!item.docusealSubmissionId || syncBusy}
+            className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-950 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={async () => {
+              setFeedback(null);
+              setSyncBusy(true);
+              const res = await fetch(`/api/signing-requests/${id}/sync-docuseal`, {
+                method: "POST",
+                credentials: "include",
+              });
+              setSyncBusy(false);
+              if (!res.ok) {
+                const j = (await res.json().catch(() => null)) as { error?: string } | null;
+                setFeedback({ ok: false, text: j?.error ?? "Could not sync from DocuSeal." });
+                return;
+              }
+              setFeedback({
+                ok: true,
+                text: "Synced from DocuSeal. Status, thank-you SMS, and team emails run if configured.",
+              });
+              void refresh();
+            }}
+          >
+            {syncBusy ? "Syncing from DocuSeal…" : "Refresh from DocuSeal"}
           </button>
           <button
             type="button"

@@ -1,15 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, startTransition } from "react";
-import type { AppSettings, CommunicationTemplates, ReminderScheduleSettings } from "@/types/models";
+import type { AppSettings, CommunicationTemplates, CompletionNotificationSettings, ReminderScheduleSettings } from "@/types/models";
 import { DEFAULT_COMMUNICATION_TEMPLATES, applyTemplateString } from "@/lib/messaging";
+import { DEFAULT_COMPLETION_NOTIFICATIONS } from "@/lib/completion-notifications";
 import { buildBrandedEmailHtml, splitEmailBodyAroundUrl } from "@/lib/email-html-layout";
 import { DEFAULT_REMINDER_SCHEDULE } from "@/lib/reminder-schedule";
 
-const PREVIEW = { clientName: "Jane Client", url: "https://sign.example/doc/abc123" };
+const PREVIEW = {
+  clientName: "Jane Client",
+  url: "https://sign.example/doc/abc123",
+  templateName: "Retainer Agreement",
+  documentUrl: "https://docuseal.example/signed/abc.pdf",
+};
 
 function mergeComm(base: AppSettings | null): CommunicationTemplates {
   return { ...DEFAULT_COMMUNICATION_TEMPLATES, ...(base?.communicationTemplates ?? {}) };
+}
+
+function mergeCompletion(base: AppSettings | null): CompletionNotificationSettings {
+  return { ...DEFAULT_COMPLETION_NOTIFICATIONS, ...(base?.completionNotifications ?? {}) };
 }
 
 function mergeRem(base: AppSettings | null): ReminderScheduleSettings {
@@ -18,6 +28,7 @@ function mergeRem(base: AppSettings | null): ReminderScheduleSettings {
 
 export default function AdminMessagesPage() {
   const [comm, setComm] = useState<CommunicationTemplates>(DEFAULT_COMMUNICATION_TEMPLATES);
+  const [completion, setCompletion] = useState<CompletionNotificationSettings>(DEFAULT_COMPLETION_NOTIFICATIONS);
   const [rem, setRem] = useState<ReminderScheduleSettings>(DEFAULT_REMINDER_SCHEDULE);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -34,6 +45,7 @@ export default function AdminMessagesPage() {
     const j = (await res.json()) as { item: AppSettings | null };
     startTransition(() => {
       setComm(mergeComm(j.item));
+      setCompletion(mergeCompletion(j.item));
       setRem(mergeRem(j.item));
       setError(null);
     });
@@ -50,7 +62,12 @@ export default function AdminMessagesPage() {
   }, [load]);
 
   const previewVars = useMemo(
-    () => ({ ...PREVIEW, firm: comm.firmName }),
+    () => ({
+      ...PREVIEW,
+      firm: comm.firmName,
+      templateName: PREVIEW.templateName,
+      documentUrl: PREVIEW.documentUrl,
+    }),
     [comm.firmName],
   );
 
@@ -113,6 +130,20 @@ export default function AdminMessagesPage() {
     previewVars,
   ]);
 
+  const previewThankYouSms = useMemo(
+    () => applyTemplateString(completion.thankYouSmsTemplate, previewVars),
+    [completion.thankYouSmsTemplate, previewVars],
+  );
+  const previewTeamEmail = useMemo(() => {
+    const subject = applyTemplateString(completion.teamCompletedEmailSubjectTemplate, previewVars);
+    const text = applyTemplateString(completion.teamCompletedEmailBodyTemplate, previewVars);
+    return { subject, text };
+  }, [
+    completion.teamCompletedEmailBodyTemplate,
+    completion.teamCompletedEmailSubjectTemplate,
+    previewVars,
+  ]);
+
   async function save() {
     setSaving(true);
     setSavedAt(null);
@@ -120,7 +151,7 @@ export default function AdminMessagesPage() {
       method: "PATCH",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ communicationTemplates: comm, reminderSchedule: rem }),
+      body: JSON.stringify({ communicationTemplates: comm, completionNotifications: completion, reminderSchedule: rem }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -131,6 +162,7 @@ export default function AdminMessagesPage() {
     const j = (await res.json()) as { item: AppSettings };
     startTransition(() => {
       setComm(mergeComm(j.item));
+      setCompletion(mergeCompletion(j.item));
       setRem(mergeRem(j.item));
       setSavedAt(new Date().toISOString());
       setError(null);
@@ -142,9 +174,10 @@ export default function AdminMessagesPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Messages & reminders</h1>
         <p className="mt-1 max-w-2xl text-sm text-[color:var(--muted)]">
-          Templates use <code className="text-xs">{"{{clientName}}"}</code>, <code className="text-xs">{"{{url}}"}</code>, and{" "}
-          <code className="text-xs">{"{{firm}}"}</code> (value from <strong>Firm & logo</strong> → Firm display name). HTML emails
-          use a branded layout with a button; include{" "}
+          Templates use <code className="text-xs">{"{{clientName}}"}</code>, <code className="text-xs">{"{{url}}"}</code>,{" "}
+          <code className="text-xs">{"{{firm}}"}</code>, and for completion emails{" "}
+          <code className="text-xs">{"{{templateName}}"}</code>, <code className="text-xs">{"{{documentUrl}}"}</code>. HTML
+          emails use a branded layout with a button; include{" "}
           <code className="text-xs">{"{{url}}"}</code> in the plain body so the link still appears in the text part and for splitting
           around the button. Set{" "}
           <code className="text-xs">NEXT_PUBLIC_SIGNFLOW_EMAIL_PUBLIC_ORIGIN</code> in <code className="text-xs">.env</code> to preview the
@@ -215,6 +248,53 @@ export default function AdminMessagesPage() {
               className="mt-1 min-h-[100px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
               value={comm.emailHtmlFooterTemplate}
               onChange={(e) => setComm((c) => ({ ...c, emailHtmlFooterTemplate: e.target.value }))}
+            />
+          </section>
+          <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">After signing — thank-you SMS</h2>
+            <p className="mt-1 text-xs text-slate-600">
+              Sent to the client&apos;s phone when DocuSeal marks the submission completed. Placeholders:{" "}
+              <code className="text-[11px]">{"{{clientName}}"}</code>, <code className="text-[11px]">{"{{firm}}"}</code>.
+            </p>
+            <label className="mt-4 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={completion.thankYouSmsEnabled}
+                onChange={(e) => setCompletion((c) => ({ ...c, thankYouSmsEnabled: e.target.checked }))}
+              />
+              Send thank-you SMS on completion
+            </label>
+            <textarea
+              className="mt-3 min-h-[100px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={completion.thankYouSmsTemplate}
+              onChange={(e) => setCompletion((c) => ({ ...c, thankYouSmsTemplate: e.target.value }))}
+            />
+          </section>
+          <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">After signing — team email</h2>
+            <p className="mt-1 text-xs text-slate-600">
+              Notifies your team when a document is signed. One email per address below. Placeholders:{" "}
+              <code className="text-[11px]">{"{{clientName}}"}</code>, <code className="text-[11px]">{"{{templateName}}"}</code>,{" "}
+              <code className="text-[11px]">{"{{documentUrl}}"}</code>, <code className="text-[11px]">{"{{firm}}"}</code>.
+            </p>
+            <label className="mt-4 block text-xs font-medium text-slate-600">Team emails (comma or newline separated)</label>
+            <textarea
+              className="mt-1 min-h-[72px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              placeholder="paralegal@firm.com, attorney@firm.com"
+              value={completion.teamNotificationEmails}
+              onChange={(e) => setCompletion((c) => ({ ...c, teamNotificationEmails: e.target.value }))}
+            />
+            <label className="mt-4 block text-xs font-medium text-slate-600">Subject</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={completion.teamCompletedEmailSubjectTemplate}
+              onChange={(e) => setCompletion((c) => ({ ...c, teamCompletedEmailSubjectTemplate: e.target.value }))}
+            />
+            <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
+            <textarea
+              className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={completion.teamCompletedEmailBodyTemplate}
+              onChange={(e) => setCompletion((c) => ({ ...c, teamCompletedEmailBodyTemplate: e.target.value }))}
             />
           </section>
           <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
@@ -319,6 +399,19 @@ export default function AdminMessagesPage() {
               Sample: <strong>{PREVIEW.clientName}</strong>, link <span className="break-all">{PREVIEW.url}</span>
             </p>
             <div className="mt-4 space-y-4 text-sm">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Thank-you SMS</div>
+                <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs text-slate-800 ring-1 ring-slate-200">
+                  {previewThankYouSms}
+                </pre>
+              </div>
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Team completion email</div>
+                <div className="mt-2 rounded-lg bg-white p-3 text-xs ring-1 ring-slate-200">
+                  <div className="font-semibold text-slate-900">{previewTeamEmail.subject}</div>
+                  <pre className="mt-2 whitespace-pre-wrap text-slate-800">{previewTeamEmail.text}</pre>
+                </div>
+              </div>
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Signing SMS</div>
                 <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs text-slate-800 ring-1 ring-slate-200">
