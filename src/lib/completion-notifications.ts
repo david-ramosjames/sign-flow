@@ -6,13 +6,13 @@ export const DEFAULT_COMPLETION_NOTIFICATIONS: CompletionNotificationSettings = 
   thankYouSmsTemplate:
     "Thank you, {{clientName}}! {{firm}} has received your signed documents. We will be in touch if anything else is needed.",
   teamNotificationEmails: "",
-  teamCompletedEmailSubjectTemplate: "{{clientName}} signed — {{templateName}}",
+  teamCompletedEmailSubjectTemplate: "{{clientName}} signed - {{templateName}}",
   teamCompletedEmailBodyTemplate: `{{clientName}} completed and signed {{templateName}}.
 
 View the signed document:
 {{documentUrl}}
 
-— {{firm}}`,
+- {{firm}}`,
 };
 
 export function mergeCompletionNotifications(settings: AppSettings | null): CompletionNotificationSettings {

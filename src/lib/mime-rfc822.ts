@@ -15,6 +15,12 @@ function wrapBase64(b64: string): string {
   return lines.join("\r\n");
 }
 
+/** RFC 2047 encoded-word for non-ASCII mail headers (Subject, etc.). */
+export function encodeRfc2047Header(value: string): string {
+  if (!value || /^[\t\x20-\x7E]*$/.test(value)) return value;
+  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+}
+
 function buildBodyPart(textBody: string, htmlBody?: string): { headers: string[]; body: string } {
   if (!htmlBody) {
     return {
@@ -51,7 +57,12 @@ export function buildRfc822Message(
   htmlBody?: string,
   attachments?: EmailAttachment[],
 ): string {
-  const headers = [`To: ${to}`, `From: ${from}`, `Subject: ${subject}`, "MIME-Version: 1.0"];
+  const headers = [
+    `To: ${to}`,
+    `From: ${from}`,
+    `Subject: ${encodeRfc2047Header(subject)}`,
+    "MIME-Version: 1.0",
+  ];
 
   if (!attachments?.length) {
     const part = buildBodyPart(textBody, htmlBody);
