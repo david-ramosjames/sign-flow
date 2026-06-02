@@ -159,7 +159,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Signing requests</h1>
           <p className="mt-1 max-w-2xl text-sm text-[color:var(--muted)]">
-            Track DocuSeal submissions, delivery channels, reminders, and Dropbox archive status.
+            Track DocuSeal submissions, delivery channels, and reminders.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -300,7 +300,7 @@ export default function DashboardPage() {
 
       <div className="overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-[1040px] w-full border-collapse text-left text-sm">
+          <table className="min-w-[920px] w-full border-collapse text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold uppercase tracking-wide text-slate-600">
               <tr>
                 <th className="px-4 py-3">Client</th>
@@ -310,14 +310,13 @@ export default function DashboardPage() {
                 <th className="px-4 py-3">Last activity</th>
                 <th className="px-4 py-3">Next reminder</th>
                 <th className="px-4 py-3">Documents</th>
-                <th className="px-4 py-3">Dropbox</th>
                 <th className="px-4 py-3">Retry send</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-slate-600">
+                  <td colSpan={8} className="px-4 py-10 text-center text-slate-600">
                     {data?.items?.length ? "No requests match these filters." : "No signing requests yet."}
                   </td>
                 </tr>
@@ -374,15 +373,6 @@ export default function DashboardPage() {
                             </a>
                           </div>
                         ) : null}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-600">
-                        {r.dropboxSignedPdfPath ? (
-                          <span className="text-emerald-700">Archived</span>
-                        ) : r.status === "completed" ? (
-                          <span className="text-amber-700">Pending</span>
-                        ) : (
-                          "—"
-                        )}
                       </td>
                       <td className="px-4 py-3 align-top">
                         {!showResend ? (

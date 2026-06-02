@@ -138,17 +138,6 @@ function RequestActions({ id }: { id: string }) {
       >
         Re-sync Dropbox
       </button>
-      <button
-        type="button"
-        className="text-left text-[color:var(--accent)] hover:underline"
-        onClick={async () => {
-          setMsg(null);
-          const res = await fetch(`/api/signing-requests/${id}/post-slack`, { method: "POST", credentials: "include" });
-          setMsg(res.ok ? "Slack posted." : "Slack failed");
-        }}
-      >
-        Post to Slack
-      </button>
       {msg ? <span className="text-[10px] text-slate-500">{msg}</span> : null}
     </div>
   );

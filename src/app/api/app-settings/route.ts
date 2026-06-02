@@ -94,7 +94,6 @@ export async function GET() {
       hasSendgrid: Boolean(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL),
       hasGmailUserOAuth: Boolean(process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_EMAIL_FROM),
       hasDropboxToken: Boolean(process.env.DROPBOX_ACCESS_TOKEN),
-      hasSlackWebhook: Boolean(process.env.SLACK_WEBHOOK_URL),
     },
   });
 }

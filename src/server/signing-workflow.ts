@@ -24,7 +24,6 @@ import { createSubmission, downloadUrlToBuffer, getSubmission, getTemplate } fro
 import { uploadDropboxFile, getDropboxTemporaryLink } from "@/services/dropbox-client";
 import type { EmailAttachment } from "@/lib/mime-rfc822";
 import { sendTransactionalEmail } from "@/services/email-delivery";
-import { postSlackMessage } from "@/services/slack-notify";
 import { sendSms } from "@/services/quo-service";
 import { appendSigningEvent } from "@/services/signing-events";
 import { isActiveSigningRequest, isCancelledSigningRequest } from "@/lib/signing-request-active";
@@ -164,11 +163,6 @@ export async function createLeadAndSigningRequest(
   signingRequest.updatedAt = nowIso();
   await store.upsertLead(lead);
   await store.upsertSigningRequest(signingRequest);
-
-  await postSlackMessage(
-    `*Sign Flow* — signing request sent\n• Client: ${lead.clientName}\n• Template: ${template.name}\n• SMS: ${signingRequest.sentViaSms ? "yes" : "no"} · Email: ${signingRequest.sentViaEmail ? "yes" : "no"}`,
-  );
-  await appendSigningEvent({ signingRequestId: reqId, leadId, type: "slack_posted", metadata: { channel: "ops" } });
 
   return { lead, signingRequest };
 }
@@ -323,16 +317,6 @@ export async function syncSignedArtifactsToDropbox(signingRequestId: string): Pr
     metadata: { folder, signedPath, auditPath },
   });
   return req;
-}
-
-export async function postSigningSlackUpdate(signingRequestId: string): Promise<void> {
-  const store = getSignFlowStore();
-  const req = await store.getSigningRequest(signingRequestId);
-  if (!req) throw new Error("Not found");
-  await postSlackMessage(
-    `*Sign Flow* — ${req.clientName}\n• Status: ${req.status}\n• Template: ${req.templateName}\n• Dropbox: ${req.dropboxSignedPdfPath ? "archived" : "pending"}`,
-  );
-  await appendSigningEvent({ signingRequestId, leadId: req.leadId, type: "slack_posted", metadata: { manual: true } });
 }
 
 export async function syncSigningRequestFromDocuseal(signingRequestId: string): Promise<SigningRequest> {
@@ -502,22 +486,6 @@ export async function applyDocusealCompletionToRequest(input: {
         metadata: { step: "dropbox", error: String(e) },
       });
     }
-  }
-
-  try {
-    const latest = await store.getSigningRequest(req.id);
-    const dropOk = Boolean(latest?.dropboxSignedPdfPath);
-    await postSlackMessage(
-      `*Sign Flow* — completed signature\n• ${req.clientName}\n• ${req.templateName}\n• Dropbox: ${dropOk ? "saved" : "skipped (no token or error)"}`,
-    );
-    await appendSigningEvent({ signingRequestId: req.id, leadId: req.leadId, type: "slack_posted", metadata: { event: "completed" } });
-  } catch (e) {
-    await appendSigningEvent({
-      signingRequestId: req.id,
-      leadId: req.leadId,
-      type: "failed",
-      metadata: { step: "slack", error: String(e) },
-    });
   }
 }
 

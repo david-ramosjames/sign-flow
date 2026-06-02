@@ -61,7 +61,7 @@ export default function AdminSettingsPage() {
           Quo SMS: <code>QUO_API_KEY</code>, <code>QUO_FROM_NUMBER</code> or <code>QUO_PHONE_NUMBER_ID</code> (optional{" "}
           <code>QUO_USER_ID</code>). Email:
           Workspace delegation (<code>GMAIL_SERVICE_ACCOUNT_*</code>, <code>GMAIL_SEND_AS_EMAIL</code>), or SendGrid, or
-          Gmail user OAuth. Dropbox: <code>DROPBOX_ACCESS_TOKEN</code>. Slack: <code>SLACK_WEBHOOK_URL</code>. Cron:{" "}
+          Gmail user OAuth. Dropbox: <code>DROPBOX_ACCESS_TOKEN</code>. Cron:{" "}
           <code>CRON_SECRET</code>.
         </div>
       </div>

@@ -27,47 +27,70 @@ export default function SigningRequestDetailPage() {
 
   const isCancelled = item?.status === "cancelled";
 
-  const refresh = useCallback(async () => {
+  const [loading, setLoading] = useState(true);
+
+  const applyDetail = useCallback((j: { item: SigningRequest; lead: Lead | null; events?: SigningEvent[] }) => {
+    setItem(j.item);
+    setLead(j.lead);
+    setEvents(j.events ?? []);
+  }, []);
+
+  const fetchDetail = useCallback(async (): Promise<boolean> => {
     const res = await fetch(`/api/signing-requests/${id}`, { credentials: "include" });
-    if (!res.ok) {
-      startTransition(() => setError("Not found"));
-      return;
-    }
-    const j = (await res.json()) as { item: SigningRequest; lead: Lead | null };
-    const eRes = await fetch(`/api/signing-requests/${id}/events`, { credentials: "include" });
-    const eventsNext = eRes.ok ? (((await eRes.json()) as { events: SigningEvent[] }).events ?? []) : [];
+    if (!res.ok) return false;
+    const j = (await res.json()) as {
+      item: SigningRequest;
+      lead: Lead | null;
+      events?: SigningEvent[];
+    };
     startTransition(() => {
       setError(null);
-      setItem(j.item);
-      setLead(j.lead);
-      setEvents(eventsNext);
+      applyDetail(j);
     });
-  }, [id]);
+    return true;
+  }, [id, applyDetail]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const refresh = useCallback(async () => {
+    const ok = await fetchDetail();
+    if (!ok) startTransition(() => setError("Not found"));
+  }, [fetchDetail]);
 
   useEffect(() => {
     void (async () => {
-      const meRes = await fetch("/api/auth/me", { credentials: "include" });
+      startTransition(() => {
+        setLoading(true);
+        setError(null);
+      });
+      const [detailOk, meRes, settingsRes] = await Promise.all([
+        fetchDetail(),
+        fetch("/api/auth/me", { credentials: "include" }),
+        fetch("/api/app-settings", { credentials: "include" }),
+      ]);
+
       if (meRes.ok) {
         const me = (await meRes.json()) as { isAdmin?: boolean };
         startTransition(() => setIsAdmin(Boolean(me.isAdmin)));
       }
-    })();
-  }, []);
 
-  useEffect(() => {
-    void (async () => {
-      const res = await fetch("/api/app-settings", { credentials: "include" });
-      if (!res.ok) return;
-      const j = (await res.json()) as { item?: { outboundDelivery?: OutboundDeliverySettings } | null };
-      startTransition(() =>
-        setOutbound({ ...DEFAULT_OUTBOUND_DELIVERY, ...(j.item?.outboundDelivery ?? {}) }),
-      );
+      if (settingsRes.ok) {
+        const settings = (await settingsRes.json()) as {
+          item?: { outboundDelivery?: OutboundDeliverySettings } | null;
+        };
+        startTransition(() =>
+          setOutbound({ ...DEFAULT_OUTBOUND_DELIVERY, ...(settings.item?.outboundDelivery ?? {}) }),
+        );
+      }
+
+      startTransition(() => {
+        setLoading(false);
+        if (!detailOk) setError("Not found");
+      });
     })();
-  }, []);
+  }, [fetchDetail]);
+
+  if (loading && !item) {
+    return null;
+  }
 
   if (error || !item) {
     return (
@@ -225,18 +248,6 @@ export default function SigningRequestDetailPage() {
             }}
           >
             Re-sync to Dropbox
-          </button>
-          <button
-            type="button"
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
-            onClick={async () => {
-              setFeedback(null);
-              const res = await fetch(`/api/signing-requests/${id}/post-slack`, { method: "POST", credentials: "include" });
-              setFeedback(res.ok ? { ok: true, text: "Posted to Slack." } : { ok: false, text: "Slack post failed." });
-              void refresh();
-            }}
-          >
-            Post to Slack
           </button>
           {!isCancelled && item.status !== "completed" ? (
             <button
