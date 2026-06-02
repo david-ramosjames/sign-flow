@@ -13,6 +13,8 @@ export interface SignFlowStore {
 
   getLead(id: string): Promise<Lead | null>;
   listLeads(): Promise<Lead[]>;
+  /** Batch-fetch leads referenced by signing requests (avoids loading the full leads collection). */
+  getLeadsByIds(ids: string[]): Promise<Lead[]>;
   upsertLead(doc: Lead): Promise<void>;
 
   getSigningRequest(id: string): Promise<SigningRequest | null>;

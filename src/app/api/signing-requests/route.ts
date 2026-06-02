@@ -30,10 +30,13 @@ export async function GET() {
   }
   const store = getSignFlowStore();
   try {
-    const items = (await store.listSigningRequests()).map(normalizeSigningRequestForDisplay);
-    const leads = await store.listLeads();
+    const [itemsRaw, appSettings] = await Promise.all([store.listSigningRequests(), store.getAppSettings()]);
+    const items = itemsRaw.map(normalizeSigningRequestForDisplay);
+    const leadIds = [...new Set(items.map((r) => r.leadId))];
+    const leads = await store.getLeadsByIds(leadIds);
     const leadsById = Object.fromEntries(leads.map((l) => [l.id, l]));
-    return NextResponse.json({ items, leadsById, store: store.isMock ? "mock" : "firestore" });
+    const outboundDelivery = mergeOutboundDelivery(appSettings);
+    return NextResponse.json({ items, leadsById, outboundDelivery, store: store.isMock ? "mock" : "firestore" });
   } catch (e) {
     if (isFirestoreNotProvisionedError(e)) {
       return NextResponse.json(

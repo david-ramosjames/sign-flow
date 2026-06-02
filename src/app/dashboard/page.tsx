@@ -11,6 +11,7 @@ import { StatusChip } from "@/components/sign-flow/status-chip";
 type ApiList = {
   items: SigningRequest[];
   leadsById: Record<string, Lead>;
+  outboundDelivery?: OutboundDeliverySettings;
 };
 
 type DateField = "sent" | "created" | "activity";
@@ -73,7 +74,7 @@ export default function DashboardPage() {
   const [dateField, setDateField] = useState<DateField>("sent");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [templateCatalog, setTemplateCatalog] = useState<{ id: number; name: string }[]>([]);
+  const [loading, setLoading] = useState(true);
   const [resendBusy, setResendBusy] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{ text: string; ok: boolean } | null>(null);
   const [outbound, setOutbound] = useState<OutboundDeliverySettings>(DEFAULT_OUTBOUND_DELIVERY);
@@ -89,13 +90,20 @@ export default function DashboardPage() {
       } catch {
         /* ignore */
       }
-      startTransition(() => setError(msg));
+      startTransition(() => {
+        setLoading(false);
+        setError(msg);
+      });
       return;
     }
     const json = (await res.json()) as ApiList;
     startTransition(() => {
+      setLoading(false);
       setError(null);
       setData(json);
+      if (json.outboundDelivery) {
+        setOutbound({ ...DEFAULT_OUTBOUND_DELIVERY, ...json.outboundDelivery });
+      }
     });
   }, []);
 
@@ -103,37 +111,13 @@ export default function DashboardPage() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    void (async () => {
-      const res = await fetch("/api/app-settings", { credentials: "include" });
-      if (!res.ok) return;
-      const j = (await res.json()) as { item?: { outboundDelivery?: OutboundDeliverySettings } | null };
-      startTransition(() =>
-        setOutbound({ ...DEFAULT_OUTBOUND_DELIVERY, ...(j.item?.outboundDelivery ?? {}) }),
-      );
-    })();
-  }, []);
-
-  useEffect(() => {
-    void (async () => {
-      const res = await fetch("/api/docuseal/templates", { credentials: "include" });
-      if (!res.ok) return;
-      const j = (await res.json()) as { items: { id: number; name: string; archivedAt: string | null }[] };
-      const rows = (j.items ?? [])
-        .filter((t) => !t.archivedAt)
-        .map((t) => ({ id: t.id, name: t.name }));
-      startTransition(() => setTemplateCatalog(rows));
-    })();
-  }, []);
-
   const templates = useMemo(() => {
     const m = new Map<number, string>();
-    for (const t of templateCatalog) m.set(t.id, t.name);
     for (const r of data?.items ?? []) {
-      if (!m.has(r.templateId)) m.set(r.templateId, r.templateName);
+      m.set(r.templateId, r.templateName);
     }
     return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [data, templateCatalog]);
+  }, [data]);
 
   const rows = useMemo(() => {
     const items = data?.items ?? [];
@@ -152,6 +136,10 @@ export default function DashboardPage() {
       return true;
     });
   }, [data, statusFilter, lang, templateId, nameSearch, dateField, dateFrom, dateTo]);
+
+  if (loading && !data) {
+    return null;
+  }
 
   return (
     <div className="space-y-6">
@@ -317,7 +305,7 @@ export default function DashboardPage() {
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-slate-600">
-                    {data?.items?.length ? "No requests match these filters." : "No signing requests yet."}
+                    {data ? (data.items.length ? "No requests match these filters." : "No signing requests yet.") : "Loading…"}
                   </td>
                 </tr>
               ) : (

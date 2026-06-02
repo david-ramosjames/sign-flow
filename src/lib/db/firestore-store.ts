@@ -42,6 +42,22 @@ export class FirestoreSignFlowStore implements SignFlowStore {
     return snap.docs.map((d) => d.data() as Lead);
   }
 
+  async getLeadsByIds(ids: string[]): Promise<Lead[]> {
+    const unique = [...new Set(ids)];
+    if (!unique.length) return [];
+    const leadsCol = col<Lead>(this.db, "leads");
+    const leads: Lead[] = [];
+    for (let i = 0; i < unique.length; i += 100) {
+      const chunk = unique.slice(i, i + 100);
+      const refs = chunk.map((id) => leadsCol.doc(id));
+      const snaps = await this.db.getAll(...refs);
+      for (const snap of snaps) {
+        if (snap.exists) leads.push(snap.data() as Lead);
+      }
+    }
+    return leads;
+  }
+
   async upsertLead(doc: Lead): Promise<void> {
     await col<Lead>(this.db, "leads").doc(doc.id).set(doc, { merge: true });
   }

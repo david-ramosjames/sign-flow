@@ -30,6 +30,15 @@ export class InMemorySignFlowStore implements SignFlowStore {
     return sortByDesc([...this.leads.values()], "createdAt");
   }
 
+  async getLeadsByIds(ids: string[]): Promise<Lead[]> {
+    const out: Lead[] = [];
+    for (const id of new Set(ids)) {
+      const lead = this.leads.get(id);
+      if (lead) out.push(lead);
+    }
+    return out;
+  }
+
   async upsertLead(doc: Lead): Promise<void> {
     this.leads.set(doc.id, doc);
   }
