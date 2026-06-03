@@ -202,7 +202,7 @@ export default function AdminMessagesPage() {
           <code className="text-xs">NEXT_PUBLIC_SIGNFLOW_EMAIL_PUBLIC_ORIGIN</code> in <code className="text-xs">.env</code> to preview the
           hosted logo here. For real sends, set <code className="text-xs">SIGNFLOW_EMAIL_PUBLIC_ORIGIN</code> on the server (same value,
           your deployed app origin) so clients see <code className="text-xs">/rj-logo.svg</code>. Reminder timing uses the server
-          timezone for the “next morning” step.
+          US Central (America/Chicago) for the “next morning” step and displayed times.
         </p>
       </div>
 

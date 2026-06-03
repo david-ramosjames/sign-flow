@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState, startTransition } from "react";
-import { format } from "date-fns";
 import type { Lead, SigningRequest } from "@/types/models";
+import { formatSignflowDateTime } from "@/lib/signflow-timezone";
 
 export default function SignedDocumentsPage() {
   const [items, setItems] = useState<SigningRequest[]>([]);
@@ -79,7 +79,7 @@ export default function SignedDocumentsPage() {
                   </td>
                   <td className="px-4 py-3">{r.templateName}</td>
                   <td className="px-4 py-3 text-xs text-slate-600">
-                    {r.completedAt ? format(new Date(r.completedAt), "MMM d, yyyy h:mm a") : "—"}
+                    {r.completedAt ? formatSignflowDateTime(r.completedAt) : "—"}
                   </td>
                   <td className="px-4 py-3 text-xs">
                     {r.signedPdfUrl ? (

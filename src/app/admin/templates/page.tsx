@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState, startTransition } from "react";
-import { format } from "date-fns";
 import type { DocuSealTemplateSummary } from "@/types/models";
+import { formatSignflowDate } from "@/lib/signflow-timezone";
 
 function collectHttpUrls(value: unknown, out: string[]): void {
   if (value === null || value === undefined) return;
@@ -147,7 +147,7 @@ export default function DocuSealTemplatesPage() {
                   <td className="px-4 py-3 font-mono text-xs text-slate-700">{t.id}</td>
                   <td className="px-4 py-3 text-slate-700">{t.folderName ?? "—"}</td>
                   <td className="px-4 py-3 text-xs text-slate-600">
-                    {t.updatedAt ? format(new Date(t.updatedAt), "MMM d, yyyy") : "—"}
+                    {t.updatedAt ? formatSignflowDate(t.updatedAt) : "—"}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap justify-end gap-2 text-xs">

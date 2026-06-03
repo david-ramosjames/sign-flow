@@ -1,4 +1,9 @@
-import { format } from "date-fns";
+import {
+  formatSignflowMonthLong,
+  formatSignflowMonthYear,
+  getSignflowCalendarParts,
+  parseIsoDateOnly,
+} from "@/lib/signflow-timezone";
 
 /** DocuSeal field names on "Contract Ramos James Law ENGLISH 2026" (and variants). */
 export const RJL_ENGLISH_2026_FIELD = {
@@ -31,16 +36,9 @@ export type BuildDocusealPrefillInput = {
   clientName: string;
   /** ISO date (yyyy-MM-dd) for date of loss. */
   dateOfLoss: string | null;
-  /** When the signing request is sent; defaults to now. */
+  /** When the signing request is sent; defaults to now (US Central calendar for “today”). */
   sentAt?: Date;
 };
-
-function parseIsoDateOnly(iso: string): Date | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
-  if (!m) return null;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return Number.isNaN(d.getTime()) ? null : d;
-}
 
 /** Pre-fill DocuSeal submitter fields (excludes signature). */
 export function buildDocusealPrefillFields(input: BuildDocusealPrefillInput): DocusealPrefillField[] {
@@ -49,15 +47,15 @@ export function buildDocusealPrefillFields(input: BuildDocusealPrefillInput): Do
   const dol = input.dateOfLoss ? parseIsoDateOnly(input.dateOfLoss) : null;
   if (!dol) return [];
 
-  const today = input.sentAt ?? new Date();
+  const today = getSignflowCalendarParts(input.sentAt ?? new Date());
   const F = RJL_ENGLISH_2026_FIELD;
 
   return [
     { name: F.clientName, default_value: input.clientName.trim(), readonly: true },
-    { name: F.dolDayNumber, default_value: String(dol.getDate()), readonly: true },
-    { name: F.dolMonthYear, default_value: format(dol, "MMMM yyyy"), readonly: true },
-    { name: F.todayDayNumber, default_value: String(today.getDate()), readonly: true },
-    { name: F.todayMonth, default_value: format(today, "MMMM"), readonly: true },
+    { name: F.dolDayNumber, default_value: String(dol.day), readonly: true },
+    { name: F.dolMonthYear, default_value: formatSignflowMonthYear(dol), readonly: true },
+    { name: F.todayDayNumber, default_value: String(today.day), readonly: true },
+    { name: F.todayMonth, default_value: formatSignflowMonthLong(today), readonly: true },
   ];
 }
 

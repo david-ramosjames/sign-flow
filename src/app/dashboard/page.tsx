@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, startTransition } from "react";
-import { endOfDay, format, isValid, parse, startOfDay } from "date-fns";
 import type { Lead, OutboundDeliverySettings, SigningRequest, SigningStatus } from "@/types/models";
+import { formatSignflowShortDateTime, toSignflowYmd } from "@/lib/signflow-timezone";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 import { postSigningResend } from "@/lib/post-signing-resend";
 import { StatusChip } from "@/components/sign-flow/status-chip";
@@ -16,32 +16,20 @@ type ApiList = {
 
 type DateField = "sent" | "created" | "activity";
 
-function parseYmdLocal(s: string): Date | null {
-  const t = parse(s.trim(), "yyyy-MM-dd", new Date());
-  return isValid(t) ? t : null;
-}
-
-function requestDateForField(r: SigningRequest, field: DateField): Date | null {
-  const iso = field === "sent" ? r.sentAt : field === "created" ? r.createdAt : r.lastActivityAt;
-  if (!iso) return null;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d;
+function requestIsoForField(r: SigningRequest, field: DateField): string | null {
+  return field === "sent" ? r.sentAt : field === "created" ? r.createdAt : r.lastActivityAt;
 }
 
 function matchesDateRange(r: SigningRequest, field: DateField, dateFrom: string, dateTo: string): boolean {
   const fromS = dateFrom.trim();
   const toS = dateTo.trim();
   if (!fromS && !toS) return true;
-  const d = requestDateForField(r, field);
-  if (!d) return false;
-  if (fromS) {
-    const from = parseYmdLocal(fromS);
-    if (from && d < startOfDay(from)) return false;
-  }
-  if (toS) {
-    const to = parseYmdLocal(toS);
-    if (to && d > endOfDay(to)) return false;
-  }
+  const iso = requestIsoForField(r, field);
+  if (!iso) return false;
+  const ymd = toSignflowYmd(iso);
+  if (!ymd) return false;
+  if (fromS && ymd < fromS) return false;
+  if (toS && ymd > toS) return false;
   return true;
 }
 
@@ -341,10 +329,10 @@ export default function DashboardPage() {
                         {!r.sentViaSms && !r.sentViaEmail ? "—" : null}
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600">
-                        {r.lastActivityAt ? format(new Date(r.lastActivityAt), "MMM d, h:mm a") : "—"}
+                        {r.lastActivityAt ? formatSignflowShortDateTime(r.lastActivityAt) : "—"}
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-600">
-                        {r.nextReminderAt ? format(new Date(r.nextReminderAt), "MMM d, h:mm a") : "—"}
+                        {r.nextReminderAt ? formatSignflowShortDateTime(r.nextReminderAt) : "—"}
                       </td>
                       <td className="px-4 py-3 text-xs">
                         {r.signingUrl ? (

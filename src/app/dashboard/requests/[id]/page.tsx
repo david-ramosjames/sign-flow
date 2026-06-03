@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, startTransition } from "react";
-import { format } from "date-fns";
 import type { Lead, OutboundDeliverySettings, SigningEvent, SigningRequest, SigningStatus } from "@/types/models";
+import {
+  formatSignflowDateTime,
+  formatSignflowShortDateTime,
+  formatSignflowTimestamp,
+} from "@/lib/signflow-timezone";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 import { postSigningResend } from "@/lib/post-signing-resend";
 import { StatusChip } from "@/components/sign-flow/status-chip";
@@ -158,11 +162,11 @@ export default function SigningRequestDetailPage() {
             </div>
             <div>
               <dt className="text-xs font-medium uppercase text-slate-500">Sent</dt>
-              <dd className="text-slate-800">{item.sentAt ? format(new Date(item.sentAt), "MMM d, yyyy h:mm a") : "—"}</dd>
+              <dd className="text-slate-800">{item.sentAt ? formatSignflowDateTime(item.sentAt) : "—"}</dd>
             </div>
             <div>
               <dt className="text-xs font-medium uppercase text-slate-500">Next reminder</dt>
-              <dd className="text-slate-800">{item.nextReminderAt ? format(new Date(item.nextReminderAt), "MMM d, h:mm a") : "—"}</dd>
+              <dd className="text-slate-800">{item.nextReminderAt ? formatSignflowShortDateTime(item.nextReminderAt) : "—"}</dd>
             </div>
           </dl>
           {item.signingUrl ? (
@@ -359,7 +363,7 @@ export default function SigningRequestDetailPage() {
             <li key={ev.id} className="border-b border-slate-100 pb-3 text-sm last:border-0">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="font-medium capitalize text-slate-900">{ev.type.replace(/_/g, " ")}</span>
-                <span className="text-xs text-slate-500">{format(new Date(ev.timestamp), "MMM d, yyyy h:mm:ss a")}</span>
+                <span className="text-xs text-slate-500">{formatSignflowTimestamp(ev.timestamp)}</span>
               </div>
               {Object.keys(ev.metadata).length ? (
                 <pre className="mt-1 max-h-24 overflow-auto rounded-lg bg-slate-50 p-2 text-[11px] text-slate-700">

@@ -1,18 +1,12 @@
 import { addHours, addMinutes } from "date-fns";
 import type { ReminderScheduleSettings } from "@/types/models";
 import { DEFAULT_REMINDER_SCHEDULE } from "@/lib/reminder-schedule";
-
-function nextLocalMorningAfter(from: Date, hour: number, minute: number): Date {
-  const d = new Date(from);
-  d.setDate(d.getDate() + 1);
-  d.setHours(hour, minute, 0, 0);
-  return d;
-}
+import { nextSignflowMorningAfter } from "@/lib/signflow-timezone";
 
 /**
  * Automated reminder schedule after initial send.
  * Step 1: `firstReminderAfterSendMinutes` after send.
- * Step 2: next calendar day at `secondReminderLocalHour` (server local TZ) after step-1 anchor time.
+ * Step 2: next calendar day at `secondReminderLocalHour` US Central after step-1 anchor time.
  * Step 3: `thirdReminderHoursAfterSecond` hours after that second anchor.
  */
 export function computeNextReminderAt(
@@ -25,9 +19,9 @@ export function computeNextReminderAt(
   if (input.reminderCount === 0) return addMinutes(sent, schedule.firstReminderAfterSendMinutes);
   const first = addMinutes(sent, schedule.firstReminderAfterSendMinutes);
   if (input.reminderCount === 1) {
-    return nextLocalMorningAfter(first, schedule.secondReminderLocalHour, 0);
+    return nextSignflowMorningAfter(first, schedule.secondReminderLocalHour, 0);
   }
-  const morning = nextLocalMorningAfter(first, schedule.secondReminderLocalHour, 0);
+  const morning = nextSignflowMorningAfter(first, schedule.secondReminderLocalHour, 0);
   if (input.reminderCount === 2) return addHours(morning, schedule.thirdReminderHoursAfterSecond);
   return null;
 }
