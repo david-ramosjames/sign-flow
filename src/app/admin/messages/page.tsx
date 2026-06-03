@@ -7,8 +7,10 @@ import type {
   CompletionNotificationSettings,
   OutboundDeliverySettings,
   ReminderScheduleSettings,
+  SupportedLanguage,
 } from "@/types/models";
 import { DEFAULT_COMMUNICATION_TEMPLATES, applyTemplateString } from "@/lib/messaging";
+import { templateForLanguage } from "@/lib/message-language";
 import { DEFAULT_COMPLETION_NOTIFICATIONS } from "@/lib/completion-notifications";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 import { buildBrandedEmailHtml, splitEmailBodyAroundUrl } from "@/lib/email-html-layout";
@@ -47,6 +49,7 @@ export default function AdminMessagesPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [previewEmailAssetBase, setPreviewEmailAssetBase] = useState<string | null>(null);
+  const [previewLanguage, setPreviewLanguage] = useState<SupportedLanguage>("en");
 
   const load = useCallback(async () => {
     const res = await fetch("/api/app-settings", { credentials: "include" });
@@ -85,14 +88,27 @@ export default function AdminMessagesPage() {
   );
 
   const previewSigningSms = useMemo(
-    () => applyTemplateString(comm.signingSmsTemplate, previewVars),
-    [comm.signingSmsTemplate, previewVars],
+    () =>
+      applyTemplateString(
+        templateForLanguage(previewLanguage, comm.signingSmsTemplate, comm.signingSmsTemplateEs),
+        previewVars,
+      ),
+    [comm.signingSmsTemplate, comm.signingSmsTemplateEs, previewLanguage, previewVars],
   );
   const previewSigningEmail = useMemo(() => {
-    const subject = applyTemplateString(comm.signingEmailSubjectTemplate, previewVars);
-    const text = applyTemplateString(comm.signingEmailBodyTemplate, previewVars);
+    const subject = applyTemplateString(
+      templateForLanguage(previewLanguage, comm.signingEmailSubjectTemplate, comm.signingEmailSubjectTemplateEs),
+      previewVars,
+    );
+    const text = applyTemplateString(
+      templateForLanguage(previewLanguage, comm.signingEmailBodyTemplate, comm.signingEmailBodyTemplateEs),
+      previewVars,
+    );
     const { before, after } = splitEmailBodyAroundUrl(text, PREVIEW.url);
-    const footerPlain = applyTemplateString(comm.emailHtmlFooterTemplate, previewVars);
+    const footerPlain = applyTemplateString(
+      templateForLanguage(previewLanguage, comm.emailHtmlFooterTemplate, comm.emailHtmlFooterTemplateEs),
+      previewVars,
+    );
     const html = buildBrandedEmailHtml({
       kind: "signing",
       beforeUrlPlain: before,
@@ -107,21 +123,38 @@ export default function AdminMessagesPage() {
   }, [
     comm.signingEmailBodyTemplate,
     comm.signingEmailSubjectTemplate,
+    comm.signingEmailBodyTemplateEs,
+    comm.signingEmailSubjectTemplateEs,
     comm.emailHtmlFooterTemplate,
+    comm.emailHtmlFooterTemplateEs,
     comm.firmName,
     comm.firmLogoUrl,
     previewEmailAssetBase,
+    previewLanguage,
     previewVars,
   ]);
   const previewReminderSms = useMemo(
-    () => applyTemplateString(comm.reminderSmsTemplate, previewVars),
-    [comm.reminderSmsTemplate, previewVars],
+    () =>
+      applyTemplateString(
+        templateForLanguage(previewLanguage, comm.reminderSmsTemplate, comm.reminderSmsTemplateEs),
+        previewVars,
+      ),
+    [comm.reminderSmsTemplate, comm.reminderSmsTemplateEs, previewLanguage, previewVars],
   );
   const previewReminderEmail = useMemo(() => {
-    const subject = applyTemplateString(comm.reminderEmailSubjectTemplate, previewVars);
-    const text = applyTemplateString(comm.reminderEmailBodyTemplate, previewVars);
+    const subject = applyTemplateString(
+      templateForLanguage(previewLanguage, comm.reminderEmailSubjectTemplate, comm.reminderEmailSubjectTemplateEs),
+      previewVars,
+    );
+    const text = applyTemplateString(
+      templateForLanguage(previewLanguage, comm.reminderEmailBodyTemplate, comm.reminderEmailBodyTemplateEs),
+      previewVars,
+    );
     const { before, after } = splitEmailBodyAroundUrl(text, PREVIEW.url);
-    const footerPlain = applyTemplateString(comm.emailHtmlFooterTemplate, previewVars);
+    const footerPlain = applyTemplateString(
+      templateForLanguage(previewLanguage, comm.emailHtmlFooterTemplate, comm.emailHtmlFooterTemplateEs),
+      previewVars,
+    );
     const html = buildBrandedEmailHtml({
       kind: "reminder",
       beforeUrlPlain: before,
@@ -136,16 +169,24 @@ export default function AdminMessagesPage() {
   }, [
     comm.reminderEmailBodyTemplate,
     comm.reminderEmailSubjectTemplate,
+    comm.reminderEmailBodyTemplateEs,
+    comm.reminderEmailSubjectTemplateEs,
     comm.emailHtmlFooterTemplate,
+    comm.emailHtmlFooterTemplateEs,
     comm.firmName,
     comm.firmLogoUrl,
     previewEmailAssetBase,
+    previewLanguage,
     previewVars,
   ]);
 
   const previewThankYouSms = useMemo(
-    () => applyTemplateString(completion.thankYouSmsTemplate, previewVars),
-    [completion.thankYouSmsTemplate, previewVars],
+    () =>
+      applyTemplateString(
+        templateForLanguage(previewLanguage, completion.thankYouSmsTemplate, completion.thankYouSmsTemplateEs),
+        previewVars,
+      ),
+    [completion.thankYouSmsTemplate, completion.thankYouSmsTemplateEs, previewLanguage, previewVars],
   );
   const previewTeamEmail = useMemo(() => {
     const subject = applyTemplateString(completion.teamCompletedEmailSubjectTemplate, previewVars);
@@ -202,7 +243,9 @@ export default function AdminMessagesPage() {
           <code className="text-xs">NEXT_PUBLIC_SIGNFLOW_EMAIL_PUBLIC_ORIGIN</code> in <code className="text-xs">.env</code> to preview the
           hosted logo here. For real sends, set <code className="text-xs">SIGNFLOW_EMAIL_PUBLIC_ORIGIN</code> on the server (same value,
           your deployed app origin) so clients see <code className="text-xs">/rj-logo.svg</code>. Reminder timing uses the server
-          US Central (America/Chicago) for the “next morning” step and displayed times.
+          US Central (America/Chicago) for the “next morning” step and displayed times. When staff choose{" "}
+          <strong>Spanish</strong> on the send form, client SMS and signing/reminder emails use the Spanish templates below
+          (thank-you SMS too).
         </p>
       </div>
 
@@ -266,15 +309,24 @@ export default function AdminMessagesPage() {
             />
           </section>
           <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">Signing — SMS</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Signing — SMS (English)</h2>
             <textarea
               className="mt-3 min-h-[100px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
               value={comm.signingSmsTemplate}
               onChange={(e) => setComm((c) => ({ ...c, signingSmsTemplate: e.target.value }))}
             />
           </section>
+          <section className="rounded-2xl border border-amber-200/80 bg-amber-50/40 p-6 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">Signing — SMS (Spanish)</h2>
+            <p className="mt-1 text-xs text-slate-600">Used when send form language is Spanish.</p>
+            <textarea
+              className="mt-3 min-h-[100px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={comm.signingSmsTemplateEs}
+              onChange={(e) => setComm((c) => ({ ...c, signingSmsTemplateEs: e.target.value }))}
+            />
+          </section>
           <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">Signing — email</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Signing — email (English)</h2>
             <label className="mt-3 block text-xs font-medium text-slate-600">Subject</label>
             <input
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
@@ -297,8 +349,29 @@ export default function AdminMessagesPage() {
               onChange={(e) => setComm((c) => ({ ...c, emailHtmlFooterTemplate: e.target.value }))}
             />
           </section>
+          <section className="rounded-2xl border border-amber-200/80 bg-amber-50/40 p-6 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">Signing — email (Spanish)</h2>
+            <label className="mt-3 block text-xs font-medium text-slate-600">Subject</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={comm.signingEmailSubjectTemplateEs}
+              onChange={(e) => setComm((c) => ({ ...c, signingEmailSubjectTemplateEs: e.target.value }))}
+            />
+            <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
+            <textarea
+              className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={comm.signingEmailBodyTemplateEs}
+              onChange={(e) => setComm((c) => ({ ...c, signingEmailBodyTemplateEs: e.target.value }))}
+            />
+            <label className="mt-4 block text-xs font-medium text-slate-600">HTML email footer (Spanish)</label>
+            <textarea
+              className="mt-1 min-h-[100px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={comm.emailHtmlFooterTemplateEs}
+              onChange={(e) => setComm((c) => ({ ...c, emailHtmlFooterTemplateEs: e.target.value }))}
+            />
+          </section>
           <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">After signing — thank-you SMS</h2>
+            <h2 className="text-sm font-semibold text-slate-900">After signing — thank-you SMS (English)</h2>
             <p className="mt-1 text-xs text-slate-600">
               Sent to the client&apos;s phone when DocuSeal marks the submission completed. Placeholders:{" "}
               <code className="text-[11px]">{"{{clientName}}"}</code>, <code className="text-[11px]">{"{{firm}}"}</code>.
@@ -315,6 +388,14 @@ export default function AdminMessagesPage() {
               className="mt-3 min-h-[100px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
               value={completion.thankYouSmsTemplate}
               onChange={(e) => setCompletion((c) => ({ ...c, thankYouSmsTemplate: e.target.value }))}
+            />
+          </section>
+          <section className="rounded-2xl border border-amber-200/80 bg-amber-50/40 p-6 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">After signing — thank-you SMS (Spanish)</h2>
+            <textarea
+              className="mt-3 min-h-[100px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={completion.thankYouSmsTemplateEs}
+              onChange={(e) => setCompletion((c) => ({ ...c, thankYouSmsTemplateEs: e.target.value }))}
             />
           </section>
           <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
@@ -345,15 +426,23 @@ export default function AdminMessagesPage() {
             />
           </section>
           <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">Reminder — SMS</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Reminder — SMS (English)</h2>
             <textarea
               className="mt-3 min-h-[100px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
               value={comm.reminderSmsTemplate}
               onChange={(e) => setComm((c) => ({ ...c, reminderSmsTemplate: e.target.value }))}
             />
           </section>
+          <section className="rounded-2xl border border-amber-200/80 bg-amber-50/40 p-6 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">Reminder — SMS (Spanish)</h2>
+            <textarea
+              className="mt-3 min-h-[100px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={comm.reminderSmsTemplateEs}
+              onChange={(e) => setComm((c) => ({ ...c, reminderSmsTemplateEs: e.target.value }))}
+            />
+          </section>
           <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">Reminder — email</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Reminder — email (English)</h2>
             <label className="mt-3 block text-xs font-medium text-slate-600">Subject</label>
             <input
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
@@ -365,6 +454,21 @@ export default function AdminMessagesPage() {
               className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
               value={comm.reminderEmailBodyTemplate}
               onChange={(e) => setComm((c) => ({ ...c, reminderEmailBodyTemplate: e.target.value }))}
+            />
+          </section>
+          <section className="rounded-2xl border border-amber-200/80 bg-amber-50/40 p-6 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">Reminder — email (Spanish)</h2>
+            <label className="mt-3 block text-xs font-medium text-slate-600">Subject</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={comm.reminderEmailSubjectTemplateEs}
+              onChange={(e) => setComm((c) => ({ ...c, reminderEmailSubjectTemplateEs: e.target.value }))}
+            />
+            <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
+            <textarea
+              className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={comm.reminderEmailBodyTemplateEs}
+              onChange={(e) => setComm((c) => ({ ...c, reminderEmailBodyTemplateEs: e.target.value }))}
             />
           </section>
           <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
@@ -442,7 +546,27 @@ export default function AdminMessagesPage() {
         <div className="space-y-4 lg:sticky lg:top-8 lg:self-start">
           <div className="rounded-2xl border border-[color:var(--border)] bg-slate-50 p-6 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-900">Preview</h2>
-            <p className="mt-1 text-xs text-slate-600">
+            <div className="mt-3 flex flex-wrap gap-3 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="previewLang"
+                  checked={previewLanguage === "en"}
+                  onChange={() => setPreviewLanguage("en")}
+                />
+                English
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="previewLang"
+                  checked={previewLanguage === "es"}
+                  onChange={() => setPreviewLanguage("es")}
+                />
+                Spanish
+              </label>
+            </div>
+            <p className="mt-2 text-xs text-slate-600">
               Sample: <strong>{PREVIEW.clientName}</strong>, link <span className="break-all">{PREVIEW.url}</span>
             </p>
             <div className="mt-4 space-y-4 text-sm">

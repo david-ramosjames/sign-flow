@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, startTransition } from "react";
-import { templateRequiresDateOfLoss } from "@/lib/docuseal-prefill";
+import { isRjlSpanish2026Template, templateRequiresDateOfLoss } from "@/lib/docuseal-prefill";
 import type { DocuSealTemplateSummary, OutboundDeliverySettings } from "@/types/models";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 
@@ -73,6 +73,12 @@ export default function SendSigningRequestPage() {
     [templates, templateId],
   );
   const needsDateOfLoss = selectedTemplate ? templateRequiresDateOfLoss(selectedTemplate.name) : false;
+
+  useEffect(() => {
+    if (selectedTemplate && isRjlSpanish2026Template(selectedTemplate.name)) {
+      setLanguage("es");
+    }
+  }, [selectedTemplate?.id, selectedTemplate?.name]);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">

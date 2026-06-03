@@ -1,10 +1,13 @@
-import type { AppSettings, CompletionNotificationSettings } from "@/types/models";
+import type { AppSettings, CompletionNotificationSettings, SupportedLanguage } from "@/types/models";
 import { applyTemplateString, mergeCommunicationTemplates } from "@/lib/messaging";
+import { templateForLanguage } from "@/lib/message-language";
 
 export const DEFAULT_COMPLETION_NOTIFICATIONS: CompletionNotificationSettings = {
   thankYouSmsEnabled: true,
   thankYouSmsTemplate:
     "Thank you, {{clientName}}! {{firm}} has received your signed documents. We will be in touch if anything else is needed.",
+  thankYouSmsTemplateEs:
+    "¡Gracias, {{clientName}}! {{firm}} recibió sus documentos firmados. Nos pondremos en contacto si necesitamos algo más.",
   teamNotificationEmails: "",
   teamCompletedEmailSubjectTemplate: "{{clientName}} signed - {{templateName}}",
   teamCompletedEmailBodyTemplate: `{{clientName}} completed and signed {{templateName}}.
@@ -37,10 +40,12 @@ export function parseEmailList(raw: string): string[] {
 export function thankYouSmsFromSettings(
   settings: AppSettings | null,
   clientName: string,
+  language: SupportedLanguage = "en",
 ): string {
   const t = mergeCompletionNotifications(settings);
   const firm = mergeCommunicationTemplates(settings).firmName;
-  return applyTemplateString(t.thankYouSmsTemplate, { clientName, firm });
+  const template = templateForLanguage(language, t.thankYouSmsTemplate, t.thankYouSmsTemplateEs);
+  return applyTemplateString(template, { clientName, firm });
 }
 
 export function teamCompletedEmailFromSettings(

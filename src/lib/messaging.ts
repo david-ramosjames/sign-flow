@@ -1,5 +1,6 @@
-import type { AppSettings, CommunicationTemplates } from "@/types/models";
+import type { AppSettings, CommunicationTemplates, SupportedLanguage } from "@/types/models";
 import { buildBrandedEmailHtml, getEmailAssetBaseUrl, splitEmailBodyAroundUrl } from "@/lib/email-html-layout";
+import { templateForLanguage } from "@/lib/message-language";
 
 /** Default when `firmName` is absent in stored settings (legacy rows). */
 export const FIRM = "Ramos James Law";
@@ -28,6 +29,31 @@ Need help? Reply to this email or contact your attorney directly.`,
   reminderEmailBodyTemplate: `Hi {{clientName}},
 
 This is a friendly reminder to review and sign your documents — use the button in this email when you are ready.
+
+{{url}}
+
+— {{firm}}`,
+  signingSmsTemplateEs:
+    "Hola {{clientName}}, le escribimos de {{firm}}. Por favor revise y firme sus documentos aquí: {{url}}. Responda ALTO para cancelar.",
+  signingEmailSubjectTemplateEs: "Documentos para revisar y firmar",
+  signingEmailBodyTemplateEs: `Hola {{clientName}},
+
+Por favor revise y firme sus documentos usando el botón en este correo.
+
+Si tiene preguntas, comuníquese con {{firm}}.
+
+Gracias.
+
+{{url}}`,
+  emailHtmlFooterTemplateEs: `{{firm}}
+
+¿Necesita ayuda? Responda a este correo o comuníquese con su abogado.`,
+  reminderSmsTemplateEs:
+    "Recordatorio de {{firm}} para {{clientName}}: complete sus documentos aquí: {{url}}. Responda ALTO para cancelar.",
+  reminderEmailSubjectTemplateEs: "Recordatorio: documentos pendientes de firma",
+  reminderEmailBodyTemplateEs: `Hola {{clientName}},
+
+Le recordamos amablemente que revise y firme sus documentos — use el botón en este correo cuando esté listo.
 
 {{url}}
 
@@ -62,22 +88,38 @@ export function applyTemplateString(
     .replaceAll("{{documentUrl}}", vars.documentUrl ?? "");
 }
 
-export function signingSmsFromSettings(settings: AppSettings | null, clientName: string, url: string): string {
+export function signingSmsFromSettings(
+  settings: AppSettings | null,
+  clientName: string,
+  url: string,
+  language: SupportedLanguage = "en",
+): string {
   const t = mergeCommunicationTemplates(settings);
-  return applyTemplateString(t.signingSmsTemplate, { clientName, url, firm: t.firmName });
+  const template = templateForLanguage(language, t.signingSmsTemplate, t.signingSmsTemplateEs);
+  return applyTemplateString(template, { clientName, url, firm: t.firmName });
 }
 
 export function signingEmailFromSettings(
   settings: AppSettings | null,
   clientName: string,
   url: string,
+  language: SupportedLanguage = "en",
 ): { subject: string; text: string; html: string } {
   const t = mergeCommunicationTemplates(settings);
   const firm = t.firmName;
-  const subject = applyTemplateString(t.signingEmailSubjectTemplate, { clientName, url, firm });
-  const text = applyTemplateString(t.signingEmailBodyTemplate, { clientName, url, firm });
+  const subject = applyTemplateString(
+    templateForLanguage(language, t.signingEmailSubjectTemplate, t.signingEmailSubjectTemplateEs),
+    { clientName, url, firm },
+  );
+  const text = applyTemplateString(
+    templateForLanguage(language, t.signingEmailBodyTemplate, t.signingEmailBodyTemplateEs),
+    { clientName, url, firm },
+  );
   const { before, after } = splitEmailBodyAroundUrl(text, url);
-  const footerPlain = applyTemplateString(t.emailHtmlFooterTemplate, { clientName, url, firm });
+  const footerPlain = applyTemplateString(
+    templateForLanguage(language, t.emailHtmlFooterTemplate, t.emailHtmlFooterTemplateEs),
+    { clientName, url, firm },
+  );
   const html = buildBrandedEmailHtml({
     kind: "signing",
     beforeUrlPlain: before,
@@ -91,22 +133,38 @@ export function signingEmailFromSettings(
   return { subject, text, html };
 }
 
-export function reminderSmsFromSettings(settings: AppSettings | null, clientName: string, url: string): string {
+export function reminderSmsFromSettings(
+  settings: AppSettings | null,
+  clientName: string,
+  url: string,
+  language: SupportedLanguage = "en",
+): string {
   const t = mergeCommunicationTemplates(settings);
-  return applyTemplateString(t.reminderSmsTemplate, { clientName, url, firm: t.firmName });
+  const template = templateForLanguage(language, t.reminderSmsTemplate, t.reminderSmsTemplateEs);
+  return applyTemplateString(template, { clientName, url, firm: t.firmName });
 }
 
 export function reminderEmailFromSettings(
   settings: AppSettings | null,
   clientName: string,
   url: string,
+  language: SupportedLanguage = "en",
 ): { subject: string; text: string; html: string } {
   const t = mergeCommunicationTemplates(settings);
   const firm = t.firmName;
-  const subject = applyTemplateString(t.reminderEmailSubjectTemplate, { clientName, url, firm });
-  const text = applyTemplateString(t.reminderEmailBodyTemplate, { clientName, url, firm });
+  const subject = applyTemplateString(
+    templateForLanguage(language, t.reminderEmailSubjectTemplate, t.reminderEmailSubjectTemplateEs),
+    { clientName, url, firm },
+  );
+  const text = applyTemplateString(
+    templateForLanguage(language, t.reminderEmailBodyTemplate, t.reminderEmailBodyTemplateEs),
+    { clientName, url, firm },
+  );
   const { before, after } = splitEmailBodyAroundUrl(text, url);
-  const footerPlain = applyTemplateString(t.emailHtmlFooterTemplate, { clientName, url, firm });
+  const footerPlain = applyTemplateString(
+    templateForLanguage(language, t.emailHtmlFooterTemplate, t.emailHtmlFooterTemplateEs),
+    { clientName, url, firm },
+  );
   const html = buildBrandedEmailHtml({
     kind: "reminder",
     beforeUrlPlain: before,

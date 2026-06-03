@@ -21,6 +21,13 @@ const communicationTemplatesPatchSchema = z
     reminderSmsTemplate: z.string().min(1).optional(),
     reminderEmailSubjectTemplate: z.string().min(1).optional(),
     reminderEmailBodyTemplate: z.string().min(1).optional(),
+    signingSmsTemplateEs: z.string().min(1).optional(),
+    signingEmailSubjectTemplateEs: z.string().min(1).optional(),
+    signingEmailBodyTemplateEs: z.string().min(1).optional(),
+    emailHtmlFooterTemplateEs: z.string().min(1).optional(),
+    reminderSmsTemplateEs: z.string().min(1).optional(),
+    reminderEmailSubjectTemplateEs: z.string().min(1).optional(),
+    reminderEmailBodyTemplateEs: z.string().min(1).optional(),
   })
   .optional();
 
@@ -37,6 +44,7 @@ const completionNotificationsPatchSchema = z
   .object({
     thankYouSmsEnabled: z.boolean().optional(),
     thankYouSmsTemplate: z.string().min(1).optional(),
+    thankYouSmsTemplateEs: z.string().min(1).optional(),
     teamNotificationEmails: z.string().optional(),
     teamCompletedEmailSubjectTemplate: z.string().min(1).optional(),
     teamCompletedEmailBodyTemplate: z.string().min(1).optional(),

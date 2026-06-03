@@ -158,13 +158,21 @@ export async function createLeadAndSigningRequest(
   });
 
   if (input.sendSms && lead.phone) {
-    await sendSms(lead.phone, signingSmsFromSettings(appSettings, lead.clientName, signingUrl));
+    await sendSms(
+      lead.phone,
+      signingSmsFromSettings(appSettings, lead.clientName, signingUrl, input.language),
+    );
     signingRequest.sentViaSms = true;
     await appendSigningEvent({ signingRequestId: reqId, leadId, type: "sms_sent", metadata: {} });
   }
 
   if (input.sendEmail && lead.email) {
-    const { subject, text, html } = signingEmailFromSettings(appSettings, lead.clientName, signingUrl);
+    const { subject, text, html } = signingEmailFromSettings(
+      appSettings,
+      lead.clientName,
+      signingUrl,
+      input.language,
+    );
     const mail = await sendTransactionalEmail({ to: lead.email, subject, textBody: text, htmlBody: html });
     if (!mail.ok) throw new Error(mail.error);
     signingRequest.sentViaEmail = true;
@@ -267,12 +275,20 @@ export async function resendSigningNotifications(
 
   if (opts.sms) {
     if (!req.phone?.trim()) throw new Error("No phone number on file for this request; add a phone number to resend SMS.");
-    await sendSms(req.phone, signingSmsFromSettings(appSettings, req.clientName, req.signingUrl));
+    await sendSms(
+      req.phone,
+      signingSmsFromSettings(appSettings, req.clientName, req.signingUrl, req.language),
+    );
     await appendSigningEvent({ signingRequestId, leadId: req.leadId, type: "sms_sent", metadata: { resend: true } });
   }
   if (opts.email) {
     if (!req.email?.trim()) throw new Error("No email address on file for this request; add an email to resend email.");
-    const { subject, text, html } = signingEmailFromSettings(appSettings, req.clientName, req.signingUrl);
+    const { subject, text, html } = signingEmailFromSettings(
+      appSettings,
+      req.clientName,
+      req.signingUrl,
+      req.language,
+    );
     const mail = await sendTransactionalEmail({ to: req.email, subject, textBody: text, htmlBody: html });
     if (!mail.ok) throw new Error(mail.error);
     await appendSigningEvent({ signingRequestId, leadId: req.leadId, type: "email_sent", metadata: { resend: true } });
@@ -430,7 +446,7 @@ export async function applyDocusealCompletionToRequest(input: {
 
   if (completionSettings.thankYouSmsEnabled && req.phone?.trim()) {
     try {
-      await sendSms(req.phone, thankYouSmsFromSettings(appSettings, req.clientName));
+      await sendSms(req.phone, thankYouSmsFromSettings(appSettings, req.clientName, req.language));
       await appendSigningEvent({
         signingRequestId: req.id,
         leadId: req.leadId,
@@ -553,7 +569,10 @@ export async function runReminderForRequest(req: SigningRequest): Promise<Signin
 
   if (req.phone?.trim() && req.sentViaSms && outbound.signingSmsEnabled) {
     try {
-      await sendSms(req.phone, reminderSmsFromSettings(appSettings, req.clientName, req.signingUrl));
+      await sendSms(
+        req.phone,
+        reminderSmsFromSettings(appSettings, req.clientName, req.signingUrl, req.language),
+      );
       smsSent = true;
       await appendSigningEvent({
         signingRequestId: req.id,
@@ -572,7 +591,12 @@ export async function runReminderForRequest(req: SigningRequest): Promise<Signin
   }
 
   if (req.email && req.sentViaEmail && outbound.signingEmailEnabled) {
-    const { subject, text, html } = reminderEmailFromSettings(appSettings, req.clientName, req.signingUrl);
+    const { subject, text, html } = reminderEmailFromSettings(
+      appSettings,
+      req.clientName,
+      req.signingUrl,
+      req.language,
+    );
     const mail = await sendTransactionalEmail({ to: req.email, subject, textBody: text, htmlBody: html });
     if (!mail.ok) {
       await appendSigningEvent({

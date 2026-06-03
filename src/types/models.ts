@@ -125,12 +125,22 @@ export type CommunicationTemplates = {
   reminderSmsTemplate: string;
   reminderEmailSubjectTemplate: string;
   reminderEmailBodyTemplate: string;
+  /** Used when signing request `language` is `es` (falls back to English if blank). */
+  signingSmsTemplateEs: string;
+  signingEmailSubjectTemplateEs: string;
+  signingEmailBodyTemplateEs: string;
+  emailHtmlFooterTemplateEs: string;
+  reminderSmsTemplateEs: string;
+  reminderEmailSubjectTemplateEs: string;
+  reminderEmailBodyTemplateEs: string;
 };
 
 /** Sent when DocuSeal marks a submission completed. Editable in Admin → Messages. */
 export type CompletionNotificationSettings = {
   thankYouSmsEnabled: boolean;
   thankYouSmsTemplate: string;
+  /** Used when request `language` is `es` (falls back to English if blank). */
+  thankYouSmsTemplateEs: string;
   /** Comma- or newline-separated team inboxes notified on completion. */
   teamNotificationEmails: string;
   teamCompletedEmailSubjectTemplate: string;
