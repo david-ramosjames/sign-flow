@@ -58,6 +58,8 @@ export type SigningRequest = {
   /** DocuSeal template id (integer from DocuSeal API). */
   templateId: number;
   templateName: string;
+  /** Date of loss (yyyy-MM-dd) for contract pre-fill; used on RJL English 2026 template. */
+  dateOfLoss: string | null;
   docusealSubmissionId: number | null;
   docusealSubmitterId: number | null;
   /** Primary signing link (DocuSeal embed / slug URL). */

@@ -136,6 +136,12 @@ function firstSubmitterRole(template: DocuSealTemplateRow): string {
   return s;
 }
 
+export type DocusealSubmitterPrefillField = {
+  name: string;
+  default_value: string;
+  readonly?: boolean;
+};
+
 export type CreateSubmissionInput = {
   templateId: number;
   clientName: string;
@@ -144,6 +150,8 @@ export type CreateSubmissionInput = {
   /** When false, DocuSeal does not send its own notifications (we send via Quo SMS / email provider). */
   sendDocusealEmail: boolean;
   sendDocusealSms: boolean;
+  /** DocuSeal template field pre-fill (field `name` must match the template). */
+  prefillFields?: DocusealSubmitterPrefillField[];
 };
 
 export async function createSubmission(input: CreateSubmissionInput): Promise<DocuSealSubmitterRow[]> {
@@ -160,6 +168,13 @@ export async function createSubmission(input: CreateSubmissionInput): Promise<Do
   };
   if (input.phone?.trim()) {
     submitter.phone = input.phone.trim().startsWith("+") ? input.phone.trim() : `+${input.phone.trim().replace(/\D/g, "")}`;
+  }
+  if (input.prefillFields?.length) {
+    submitter.fields = input.prefillFields.map((f) => ({
+      name: f.name,
+      default_value: f.default_value,
+      readonly: f.readonly ?? true,
+    }));
   }
 
   const body: Record<string, unknown> = {

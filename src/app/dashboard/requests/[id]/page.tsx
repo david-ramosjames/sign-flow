@@ -146,6 +146,12 @@ export default function SigningRequestDetailPage() {
               <dt className="text-xs font-medium uppercase text-slate-500">Language</dt>
               <dd className="text-slate-800">{item.language}</dd>
             </div>
+            {item.dateOfLoss ? (
+              <div>
+                <dt className="text-xs font-medium uppercase text-slate-500">Date of loss</dt>
+                <dd className="text-slate-800">{item.dateOfLoss}</dd>
+              </div>
+            ) : null}
             <div>
               <dt className="text-xs font-medium uppercase text-slate-500">Lead source</dt>
               <dd className="text-slate-800">{lead?.source ?? "—"}</dd>

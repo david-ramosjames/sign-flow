@@ -12,7 +12,8 @@ export function isActiveSigningRequest(req: SigningRequest): boolean {
 }
 
 export function normalizeSigningRequestForDisplay(req: SigningRequest): SigningRequest {
-  let out = normalizeSigningRequestDocusealUrls(req);
+  let out: SigningRequest = { ...req, dateOfLoss: req.dateOfLoss ?? null };
+  out = normalizeSigningRequestDocusealUrls(out);
   if (out.deletedAt && out.status !== "cancelled") {
     out = { ...out, status: "cancelled" satisfies SigningStatus };
   }

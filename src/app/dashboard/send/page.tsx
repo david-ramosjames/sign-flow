@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, startTransition } from "react";
+import { useEffect, useMemo, useState, startTransition } from "react";
+import { isRjlEnglish2026Template } from "@/lib/docuseal-prefill";
 import type { DocuSealTemplateSummary, OutboundDeliverySettings } from "@/types/models";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 
@@ -10,6 +11,7 @@ export default function SendSigningRequestPage() {
   const [templates, setTemplates] = useState<DocuSealTemplateSummary[]>([]);
   const [templateId, setTemplateId] = useState<string>("");
   const [clientName, setClientName] = useState("");
+  const [dateOfLoss, setDateOfLoss] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [language, setLanguage] = useState<"en" | "es">("en");
@@ -65,6 +67,12 @@ export default function SendSigningRequestPage() {
   }, []);
 
   const canDeliver = outbound.signingSmsEnabled || outbound.signingEmailEnabled;
+
+  const selectedTemplate = useMemo(
+    () => templates.find((t) => String(t.id) === templateId),
+    [templates, templateId],
+  );
+  const needsDateOfLoss = selectedTemplate ? isRjlEnglish2026Template(selectedTemplate.name) : false;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -123,12 +131,18 @@ export default function SendSigningRequestPage() {
             setBusy(false);
             return;
           }
+          if (needsDateOfLoss && !dateOfLoss.trim()) {
+            setError("Date of loss is required for the English 2026 contract.");
+            setBusy(false);
+            return;
+          }
           const res = await fetch("/api/signing-requests", {
             method: "POST",
             credentials: "include",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               clientName,
+              dateOfLoss: needsDateOfLoss ? dateOfLoss.trim() : null,
               phone: phone.trim() || null,
               email: email.trim() || null,
               language,
@@ -188,6 +202,22 @@ export default function SendSigningRequestPage() {
             placeholder="Jane Doe"
           />
         </div>
+
+        {needsDateOfLoss ? (
+          <div>
+            <label className="text-sm font-medium text-slate-900">Date of loss</label>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Pre-fills DOL day and month/year on the contract. Today&apos;s date is filled automatically when you send.
+            </p>
+            <input
+              required
+              type="date"
+              className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={dateOfLoss}
+              onChange={(e) => setDateOfLoss(e.target.value)}
+            />
+          </div>
+        ) : null}
 
         {(outbound.signingSmsEnabled || outbound.signingEmailEnabled) && (
           <div

@@ -18,6 +18,10 @@ const postSchema = z.object({
   sendSms: z.boolean(),
   sendEmail: z.boolean(),
   reminderEnabled: z.boolean(),
+  dateOfLoss: z
+    .preprocess((v) => (v === "" || v === null || v === undefined ? null : v), z.string().optional())
+    .nullable()
+    .optional(),
   source: z.string().optional(),
   assignedTo: z.string().optional().nullable(),
 });
@@ -99,6 +103,7 @@ export async function POST(req: Request) {
         language: parsed.data.language,
         source: parsed.data.source ?? "dashboard",
         templateId: parsed.data.templateId,
+        dateOfLoss: parsed.data.dateOfLoss?.trim() || null,
         sendSms: parsed.data.sendSms,
         sendEmail: parsed.data.sendEmail,
         reminderEnabled: parsed.data.reminderEnabled,

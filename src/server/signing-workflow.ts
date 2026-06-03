@@ -19,6 +19,7 @@ import {
 } from "@/lib/messaging";
 import { newId, nowIso } from "@/lib/time";
 import { getSignFlowStore } from "@/lib/db";
+import { buildDocusealPrefillFields, templateRequiresDateOfLoss } from "@/lib/docuseal-prefill";
 import { normalizeDocusealPublicUrl, normalizeSigningRequestDocusealUrls } from "@/lib/docuseal-public-url";
 import { createSubmission, downloadUrlToBuffer, getSubmission, getTemplate } from "@/services/docuseal-client";
 import { uploadDropboxFile, getDropboxTemporaryLink } from "@/services/dropbox-client";
@@ -36,6 +37,8 @@ export type CreateSigningRequestInput = {
   language: SupportedLanguage;
   source: string;
   templateId: number;
+  /** yyyy-MM-dd; required for templates that pre-fill date-of-loss fields. */
+  dateOfLoss: string | null;
   sendSms: boolean;
   sendEmail: boolean;
   reminderEnabled: boolean;
@@ -68,6 +71,18 @@ export async function createLeadAndSigningRequest(
 
   const template = await getTemplate(input.templateId);
 
+  if (templateRequiresDateOfLoss(template.name) && !input.dateOfLoss?.trim()) {
+    throw new Error("Date of loss is required for this contract template.");
+  }
+
+  const sentAt = new Date();
+  const prefillFields = buildDocusealPrefillFields({
+    templateName: template.name,
+    clientName: input.clientName.trim(),
+    dateOfLoss: input.dateOfLoss?.trim() || null,
+    sentAt,
+  });
+
   const submitters = await createSubmission({
     templateId: input.templateId,
     clientName: input.clientName.trim(),
@@ -75,14 +90,15 @@ export async function createLeadAndSigningRequest(
     phone: input.phone,
     sendDocusealEmail: false,
     sendDocusealSms: false,
+    prefillFields,
   });
 
   const primary = submitters[0];
   if (!primary?.submission_id) throw new Error("DocuSeal did not return a submission id.");
 
   const signingUrl = normalizeDocusealPublicUrl(primary.embed_src ?? null, primary.slug);
-  const sentAt = nowIso();
-  const sentDate = new Date(sentAt);
+  const sentAtIso = nowIso();
+  const sentDate = new Date(sentAtIso);
 
   const signingRequest: SigningRequest = {
     id: reqId,
@@ -93,6 +109,7 @@ export async function createLeadAndSigningRequest(
     language: input.language,
     templateId: input.templateId,
     templateName: template.name,
+    dateOfLoss: input.dateOfLoss?.trim() || null,
     docusealSubmissionId: primary.submission_id,
     docusealSubmitterId: primary.id ?? null,
     signingUrl,
@@ -114,8 +131,8 @@ export async function createLeadAndSigningRequest(
     dropboxSignedPdfLink: null,
     dropboxAuditLink: null,
     manualFollowUp: false,
-    sentAt,
-    lastActivityAt: sentAt,
+    sentAt: sentAtIso,
+    lastActivityAt: sentAtIso,
     createdAt: now,
     updatedAt: now,
   };
