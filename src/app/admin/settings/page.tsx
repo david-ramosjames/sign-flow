@@ -81,11 +81,11 @@ export default function AdminSettingsPage() {
       <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
         <div className="text-sm font-semibold text-slate-900">Reminder cron</div>
         <p className="mt-2 text-sm text-slate-700">
-          Unsigned requests with reminders enabled are processed automatically every 10 minutes on production (
-          <code className="rounded bg-slate-100 px-1 text-xs">/api/cron/reminders</code> via{" "}
-          <code className="text-xs">vercel.json</code>). After deploy, confirm under Vercel → Project → Settings →
-          Cron Jobs. Optional <code>CRON_SECRET</code> still works for manual runs with header{" "}
-          <code className="text-xs">x-cron-secret</code>; Vercel scheduled runs are allowed automatically.
+          Unsigned requests with reminders enabled are checked when someone opens the{" "}
+          <strong>Signing requests</strong> dashboard (primary on Vercel Hobby). A backup cron runs once per day at 14:00
+          UTC (<code className="rounded bg-slate-100 px-1 text-xs">/api/cron/reminders</code>). For more frequent sweeps
+          without upgrading Vercel, use a free external scheduler (e.g. cron-job.org) to GET that URL every 10–15 minutes
+          with header <code className="text-xs">x-cron-secret</code> if <code>CRON_SECRET</code> is set.
         </p>
       </div>
 

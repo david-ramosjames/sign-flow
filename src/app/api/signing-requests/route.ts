@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSignFlowStore } from "@/lib/db";
@@ -5,6 +6,7 @@ import { isFirestoreNotProvisionedError } from "@/lib/db/firestore-errors";
 import { requireSessionUser } from "@/lib/auth/get-session";
 import { mergeOutboundDelivery } from "@/lib/outbound-delivery";
 import { normalizeSigningRequestForDisplay } from "@/lib/signing-request-active";
+import { processDueReminders } from "@/server/reminder-processor";
 import { createLeadAndSigningRequest } from "@/server/signing-workflow";
 
 const postSchema = z.object({
@@ -40,6 +42,16 @@ export async function GET() {
     const leads = await store.getLeadsByIds(leadIds);
     const leadsById = Object.fromEntries(leads.map((l) => [l.id, l]));
     const outboundDelivery = mergeOutboundDelivery(appSettings);
+
+    // Vercel Hobby: cron can only run once/day — sweep due reminders when staff open the dashboard.
+    after(async () => {
+      try {
+        await processDueReminders();
+      } catch {
+        /* non-fatal; cron or next dashboard load can retry */
+      }
+    });
+
     return NextResponse.json({ items, leadsById, outboundDelivery, store: store.isMock ? "mock" : "firestore" });
   } catch (e) {
     if (isFirestoreNotProvisionedError(e)) {
