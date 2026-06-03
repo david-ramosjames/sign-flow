@@ -45,16 +45,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-0.5 outline-none transition hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/40"
             aria-label="Sign Flow — go to dashboard"
           >
-            <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-white/10 ring-1 ring-white/20">
+            <div className="flex h-10 shrink-0 items-center">
               {logoFailed ? (
                 <span className="text-xs font-bold text-white">RJ</span>
               ) : (
                 <img
-                  src="/rj-logo.svg"
-                  alt=""
-                  width={40}
+                  src="/ramosjames-new-logo-white-revised-f.webp"
+                  alt="Ramos James Law"
+                  width={200}
                   height={40}
-                  className="object-contain p-0.5"
+                  className="h-10 w-auto max-w-[min(220px,42vw)] object-contain object-left"
                   onError={() => setLogoFailed(true)}
                 />
               )}
