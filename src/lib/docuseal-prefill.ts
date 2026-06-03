@@ -1,5 +1,7 @@
 import {
+  formatCalendarDateSpanish,
   formatSignflowMonthLong,
+  formatSignflowMonthSpanish,
   formatSignflowMonthYear,
   getSignflowCalendarParts,
   parseIsoDateOnly,
@@ -15,14 +17,29 @@ export const RJL_ENGLISH_2026_FIELD = {
   signature: "signature",
 } as const;
 
-const SIGNATURE_FIELD_LOWER = RJL_ENGLISH_2026_FIELD.signature.toLowerCase();
+/** DocuSeal field names on "Contract Ramos James Law SPANISH 2026" (and variants). */
+export const RJL_SPANISH_2026_FIELD = {
+  clientName: "client name",
+  dateOfLoss: "date of loss",
+  todayDayNumber: "today day number",
+  todayMonthSpanish: "today month spanish",
+  signature: "signature",
+} as const;
+
+const SIGNER_ONLY_FIELDS_LOWER = new Set(
+  [RJL_ENGLISH_2026_FIELD.signature, RJL_SPANISH_2026_FIELD.signature].map((n) => n.toLowerCase()),
+);
 
 export function isRjlEnglish2026Template(templateName: string): boolean {
   return /ramos james law english 2026/i.test(templateName);
 }
 
+export function isRjlSpanish2026Template(templateName: string): boolean {
+  return /ramos james law spanish 2026/i.test(templateName);
+}
+
 export function templateRequiresDateOfLoss(templateName: string): boolean {
-  return isRjlEnglish2026Template(templateName);
+  return isRjlEnglish2026Template(templateName) || isRjlSpanish2026Template(templateName);
 }
 
 export type DocusealPrefillField = {
@@ -40,13 +57,7 @@ export type BuildDocusealPrefillInput = {
   sentAt?: Date;
 };
 
-/** Pre-fill DocuSeal submitter fields (excludes signature). */
-export function buildDocusealPrefillFields(input: BuildDocusealPrefillInput): DocusealPrefillField[] {
-  if (!isRjlEnglish2026Template(input.templateName)) return [];
-
-  const dol = input.dateOfLoss ? parseIsoDateOnly(input.dateOfLoss) : null;
-  if (!dol) return [];
-
+function buildEnglish2026Prefill(input: BuildDocusealPrefillInput, dol: NonNullable<ReturnType<typeof parseIsoDateOnly>>): DocusealPrefillField[] {
   const today = getSignflowCalendarParts(input.sentAt ?? new Date());
   const F = RJL_ENGLISH_2026_FIELD;
 
@@ -59,7 +70,33 @@ export function buildDocusealPrefillFields(input: BuildDocusealPrefillInput): Do
   ];
 }
 
+function buildSpanish2026Prefill(input: BuildDocusealPrefillInput, dol: NonNullable<ReturnType<typeof parseIsoDateOnly>>): DocusealPrefillField[] {
+  const today = getSignflowCalendarParts(input.sentAt ?? new Date());
+  const F = RJL_SPANISH_2026_FIELD;
+
+  return [
+    { name: F.clientName, default_value: input.clientName.trim(), readonly: true },
+    { name: F.dateOfLoss, default_value: formatCalendarDateSpanish(dol), readonly: true },
+    { name: F.todayDayNumber, default_value: String(today.day), readonly: true },
+    { name: F.todayMonthSpanish, default_value: formatSignflowMonthSpanish(today), readonly: true },
+  ];
+}
+
+/** Pre-fill DocuSeal submitter fields (excludes signature). */
+export function buildDocusealPrefillFields(input: BuildDocusealPrefillInput): DocusealPrefillField[] {
+  const dol = input.dateOfLoss ? parseIsoDateOnly(input.dateOfLoss) : null;
+  if (!dol) return [];
+
+  if (isRjlEnglish2026Template(input.templateName)) {
+    return buildEnglish2026Prefill(input, dol);
+  }
+  if (isRjlSpanish2026Template(input.templateName)) {
+    return buildSpanish2026Prefill(input, dol);
+  }
+  return [];
+}
+
 /** Never pre-fill signature or other signer-only fields. */
 export function isSignerOnlyDocusealField(fieldName: string): boolean {
-  return fieldName.trim().toLowerCase() === SIGNATURE_FIELD_LOWER;
+  return SIGNER_ONLY_FIELDS_LOWER.has(fieldName.trim().toLowerCase());
 }

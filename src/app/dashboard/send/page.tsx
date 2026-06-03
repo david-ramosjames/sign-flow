@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, startTransition } from "react";
-import { isRjlEnglish2026Template } from "@/lib/docuseal-prefill";
+import { templateRequiresDateOfLoss } from "@/lib/docuseal-prefill";
 import type { DocuSealTemplateSummary, OutboundDeliverySettings } from "@/types/models";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 
@@ -72,7 +72,7 @@ export default function SendSigningRequestPage() {
     () => templates.find((t) => String(t.id) === templateId),
     [templates, templateId],
   );
-  const needsDateOfLoss = selectedTemplate ? isRjlEnglish2026Template(selectedTemplate.name) : false;
+  const needsDateOfLoss = selectedTemplate ? templateRequiresDateOfLoss(selectedTemplate.name) : false;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -132,7 +132,7 @@ export default function SendSigningRequestPage() {
             return;
           }
           if (needsDateOfLoss && !dateOfLoss.trim()) {
-            setError("Date of loss is required for the English 2026 contract.");
+            setError("Date of loss is required for this contract template.");
             setBusy(false);
             return;
           }
@@ -175,7 +175,7 @@ export default function SendSigningRequestPage() {
             {!loadingTemplates && templates.length === 0 ? <option value="">No templates</option> : null}
             {templates.map((t) => (
               <option key={t.id} value={String(t.id)}>
-                {t.name} (#{t.id})
+                {t.name}
               </option>
             ))}
           </select>
@@ -207,7 +207,8 @@ export default function SendSigningRequestPage() {
           <div>
             <label className="text-sm font-medium text-slate-900">Date of loss</label>
             <p className="mt-0.5 text-xs text-slate-500">
-              Pre-fills DOL day and month/year on the contract. Today&apos;s date is filled automatically when you send.
+              Pre-fills date-of-loss fields on the contract. Today&apos;s date is filled automatically when you send (US
+              Central).
             </p>
             <input
               required

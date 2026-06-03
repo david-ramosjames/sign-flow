@@ -52,6 +52,25 @@ export function formatSignflowMonthYear(calendar: SignflowCalendarDate): string 
   return `${formatSignflowMonthLong(calendar)} ${calendar.year}`;
 }
 
+function calendarToUtcDate(calendar: SignflowCalendarDate): Date {
+  return new Date(Date.UTC(calendar.year, calendar.month - 1, calendar.day));
+}
+
+/** Full calendar date in Spanish (e.g. "15 de junio de 2026") for contract pre-fill. */
+export function formatCalendarDateSpanish(calendar: SignflowCalendarDate): string {
+  return new Intl.DateTimeFormat("es-US", {
+    timeZone: "UTC",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(calendarToUtcDate(calendar));
+}
+
+/** Month name in Spanish for a US Central calendar day (e.g. "junio"). */
+export function formatSignflowMonthSpanish(calendar: SignflowCalendarDate): string {
+  return new Intl.DateTimeFormat("es-US", { month: "long", timeZone: "UTC" }).format(calendarToUtcDate(calendar));
+}
+
 /** Next calendar day in US Central at the given local hour (reminder “next morning”). */
 export function nextSignflowMorningAfter(from: Date, hour: number, minute = 0): Date {
   const zoned = toZonedTime(from, SIGNFLOW_TIMEZONE);

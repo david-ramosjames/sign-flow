@@ -40,14 +40,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-[color:var(--background)]">
       <header className="border-b border-white/10 bg-[color:var(--brand-navy)] text-white shadow-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+          <Link
+            href="/dashboard"
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-0.5 outline-none transition hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/40"
+            aria-label="Sign Flow — go to dashboard"
+          >
             <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-white/10 ring-1 ring-white/20">
               {logoFailed ? (
                 <span className="text-xs font-bold text-white">RJ</span>
               ) : (
                 <img
                   src="/rj-logo.svg"
-                  alt="Ramos James Law"
+                  alt=""
                   width={40}
                   height={40}
                   className="object-contain p-0.5"
@@ -59,7 +63,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="truncate text-sm font-semibold tracking-tight">Sign Flow</div>
               <div className="truncate text-xs text-white/70">Ramos James Law · Lead signing</div>
             </div>
-          </div>
+          </Link>
           <nav className="hidden flex-wrap items-center justify-end gap-1 lg:flex">
             {nav.map((n) => (
               <Link
