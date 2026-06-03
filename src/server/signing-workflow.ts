@@ -531,9 +531,29 @@ export async function runReminderForRequest(req: SigningRequest): Promise<Signin
   if (!next || next.getTime() > Date.now()) return null;
 
   const sentAt = new Date(req.sentAt);
-  if (req.phone && req.sentViaSms && outbound.signingSmsEnabled) {
-    await sendSms(req.phone, reminderSmsFromSettings(appSettings, req.clientName, req.signingUrl));
+  let smsSent = false;
+  let emailSent = false;
+
+  if (req.phone?.trim() && req.sentViaSms && outbound.signingSmsEnabled) {
+    try {
+      await sendSms(req.phone, reminderSmsFromSettings(appSettings, req.clientName, req.signingUrl));
+      smsSent = true;
+      await appendSigningEvent({
+        signingRequestId: req.id,
+        leadId: req.leadId,
+        type: "sms_sent",
+        metadata: { kind: "reminder" },
+      });
+    } catch (e) {
+      await appendSigningEvent({
+        signingRequestId: req.id,
+        leadId: req.leadId,
+        type: "failed",
+        metadata: { step: "reminder_sms", error: String(e) },
+      });
+    }
   }
+
   if (req.email && req.sentViaEmail && outbound.signingEmailEnabled) {
     const { subject, text, html } = reminderEmailFromSettings(appSettings, req.clientName, req.signingUrl);
     const mail = await sendTransactionalEmail({ to: req.email, subject, textBody: text, htmlBody: html });
@@ -544,7 +564,19 @@ export async function runReminderForRequest(req: SigningRequest): Promise<Signin
         type: "failed",
         metadata: { step: "reminder_email", error: mail.error },
       });
+    } else {
+      emailSent = true;
+      await appendSigningEvent({
+        signingRequestId: req.id,
+        leadId: req.leadId,
+        type: "email_sent",
+        metadata: { kind: "reminder" },
+      });
     }
+  }
+
+  if (!smsSent && !emailSent) {
+    return null;
   }
 
   req.reminderCount += 1;
@@ -562,7 +594,7 @@ export async function runReminderForRequest(req: SigningRequest): Promise<Signin
     signingRequestId: req.id,
     leadId: req.leadId,
     type: "reminder_sent",
-    metadata: { count: req.reminderCount },
+    metadata: { count: req.reminderCount, sms: smsSent, email: emailSent },
   });
   return req;
 }

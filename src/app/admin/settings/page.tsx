@@ -79,6 +79,17 @@ export default function AdminSettingsPage() {
       </div>
 
       <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
+        <div className="text-sm font-semibold text-slate-900">Reminder cron</div>
+        <p className="mt-2 text-sm text-slate-700">
+          Unsigned requests with reminders enabled are processed automatically every 10 minutes on production (
+          <code className="rounded bg-slate-100 px-1 text-xs">/api/cron/reminders</code> via{" "}
+          <code className="text-xs">vercel.json</code>). After deploy, confirm under Vercel → Project → Settings →
+          Cron Jobs. Optional <code>CRON_SECRET</code> still works for manual runs with header{" "}
+          <code className="text-xs">x-cron-secret</code>; Vercel scheduled runs are allowed automatically.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
         <div className="text-sm font-semibold text-slate-900">DocuSeal webhooks</div>
         <p className="mt-2 text-sm text-slate-700">
           Point DocuSeal webhooks to:{" "}

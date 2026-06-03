@@ -3,13 +3,24 @@ import { getSignFlowStore } from "@/lib/db";
 import { isActiveSigningRequest } from "@/lib/signing-request-active";
 import { runReminderForRequest } from "@/server/signing-workflow";
 
+export const dynamic = "force-dynamic";
+
+/** Vercel Cron uses `vercel-cron/1.0`; manual runs can pass `x-cron-secret`. */
+function isCronAuthorized(req: Request): boolean {
+  const secret = process.env.CRON_SECRET?.trim();
+  if (!secret) return true;
+  if (req.headers.get("x-cron-secret") === secret) return true;
+  const ua = req.headers.get("user-agent") ?? "";
+  if (ua.includes("vercel-cron")) return true;
+  if (req.headers.get("x-vercel-cron-schedule")) return true;
+  return false;
+}
+
 /**
- * Reminder cron — call from Vercel Cron / Railway scheduler with `CRON_SECRET` header `x-cron-secret`.
+ * Reminder cron — Vercel Cron (see vercel.json) or manual GET with optional `x-cron-secret`.
  */
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  const header = req.headers.get("x-cron-secret");
-  if (secret && header !== secret) {
+  if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -25,10 +36,15 @@ export async function GET(req: Request) {
   );
 
   let processed = 0;
+  const errors: { id: string; error: string }[] = [];
   for (const r of due) {
-    const out = await runReminderForRequest(r);
-    if (out) processed += 1;
+    try {
+      const out = await runReminderForRequest(r);
+      if (out) processed += 1;
+    } catch (e) {
+      errors.push({ id: r.id, error: e instanceof Error ? e.message : String(e) });
+    }
   }
 
-  return NextResponse.json({ ok: true, due: due.length, processed });
+  return NextResponse.json({ ok: true, due: due.length, processed, errors });
 }
