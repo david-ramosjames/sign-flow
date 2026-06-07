@@ -8,6 +8,7 @@ const nav = [
   { href: "/dashboard", label: "Requests" },
   { href: "/dashboard/send", label: "Send request" },
   { href: "/dashboard/signed", label: "Signed documents" },
+  { href: "/dashboard/faq", label: "FAQ" },
   { href: "/admin", label: "Admin" },
 ];
 
