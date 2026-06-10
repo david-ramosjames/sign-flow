@@ -26,8 +26,19 @@ export const RJL_SPANISH_2026_FIELD = {
   signature: "signature",
 } as const;
 
+/** DocuSeal field names on SAR (release) templates — one template per person in DocuSeal. */
+export const SAR_RELEASE_FIELD = {
+  dayNumberToday: "day-number-today",
+  monthNameToday: "month-name-today",
+  signature: "signature",
+} as const;
+
 const SIGNER_ONLY_FIELDS_LOWER = new Set(
-  [RJL_ENGLISH_2026_FIELD.signature, RJL_SPANISH_2026_FIELD.signature].map((n) => n.toLowerCase()),
+  [
+    RJL_ENGLISH_2026_FIELD.signature,
+    RJL_SPANISH_2026_FIELD.signature,
+    SAR_RELEASE_FIELD.signature,
+  ].map((n) => n.toLowerCase()),
 );
 
 export function isRjlEnglish2026Template(templateName: string): boolean {
@@ -38,8 +49,29 @@ export function isRjlSpanish2026Template(templateName: string): boolean {
   return /ramos james law spanish 2026/i.test(templateName);
 }
 
+/** SAR release — template name should include “SAR” (each person has their own DocuSeal template). */
+export function isSarReleaseTemplate(templateName: string): boolean {
+  return /\bsar\b/i.test(templateName);
+}
+
 export function templateRequiresDateOfLoss(templateName: string): boolean {
   return isRjlEnglish2026Template(templateName) || isRjlSpanish2026Template(templateName);
+}
+
+export function templateRequiresClientName(templateName: string): boolean {
+  return !isSarReleaseTemplate(templateName);
+}
+
+export function templateShowsLanguageChoice(templateName: string): boolean {
+  return !isSarReleaseTemplate(templateName);
+}
+
+export function filterIntakeTemplates<T extends { name: string; archivedAt?: string | null }>(templates: T[]): T[] {
+  return templates.filter((t) => !t.archivedAt && !isSarReleaseTemplate(t.name));
+}
+
+export function filterSarReleaseTemplates<T extends { name: string; archivedAt?: string | null }>(templates: T[]): T[] {
+  return templates.filter((t) => !t.archivedAt && isSarReleaseTemplate(t.name));
 }
 
 export type DocusealPrefillField = {
@@ -82,8 +114,30 @@ function buildSpanish2026Prefill(input: BuildDocusealPrefillInput, dol: NonNulla
   ];
 }
 
+function buildSarReleasePrefill(input: BuildDocusealPrefillInput): DocusealPrefillField[] {
+  const today = getSignflowCalendarParts(input.sentAt ?? new Date());
+  const F = SAR_RELEASE_FIELD;
+
+  return [
+    { name: F.dayNumberToday, default_value: String(today.day), readonly: true },
+    { name: F.monthNameToday, default_value: formatSignflowMonthLong(today), readonly: true },
+  ];
+}
+
+/** Dashboard / SMS label when staff leave client name blank on SAR templates. */
+export function resolveClientNameForSigningRequest(templateName: string, clientName: string | null | undefined): string {
+  const trimmed = clientName?.trim();
+  if (trimmed) return trimmed;
+  if (isSarReleaseTemplate(templateName)) return templateName.trim();
+  throw new Error("Client name is required for this template.");
+}
+
 /** Pre-fill DocuSeal submitter fields (excludes signature). */
 export function buildDocusealPrefillFields(input: BuildDocusealPrefillInput): DocusealPrefillField[] {
+  if (isSarReleaseTemplate(input.templateName)) {
+    return buildSarReleasePrefill(input);
+  }
+
   const dol = input.dateOfLoss ? parseIsoDateOnly(input.dateOfLoss) : null;
   if (!dol) return [];
 

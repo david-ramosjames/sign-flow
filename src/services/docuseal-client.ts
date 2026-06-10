@@ -109,6 +109,13 @@ export async function getTemplate(templateId: number): Promise<DocuSealTemplateR
   return (await res.json()) as DocuSealTemplateRow;
 }
 
+/** Archive a one-time template in DocuSeal (e.g. SAR release after send). */
+export async function archiveTemplate(templateId: number): Promise<void> {
+  const url = docusealApiRequestUrl(`/templates/${templateId}`);
+  const res = await fetch(url, { method: "DELETE", headers: docusealHeaders() });
+  if (!res.ok) throw new Error(await docusealApiError(res, "archive template", url));
+}
+
 /** Full template JSON from DocuSeal (schema, fields, etc.). */
 export async function getTemplateJson(templateId: number): Promise<unknown> {
   const url = docusealApiRequestUrl(`/templates/${templateId}`);

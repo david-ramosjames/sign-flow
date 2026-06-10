@@ -55,7 +55,29 @@ const SECTIONS: FaqSection[] = [
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>English Intake Contract</li>
             <li>Spanish Intake Contract</li>
+            <li>SAR (release) — one DocuSeal template per person; name must include “SAR”</li>
           </ul>
+        ),
+      },
+      {
+        question: "How do I send an SAR (release)?",
+        answer: (
+          <>
+            <p className="mb-2">
+              Use{" "}
+              <Link href="/dashboard/send/sar" className="font-medium text-[color:var(--brand-navy)] underline underline-offset-2">
+                Send SAR
+              </Link>{" "}
+              (not the regular send form). That page only lists SAR templates and keeps intake contracts out of the
+              dropdown.
+            </p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5">
+              <li>Create the person&apos;s SAR template in DocuSeal (name must include &quot;SAR&quot;)</li>
+              <li>Open Send SAR and select that template</li>
+              <li>Enter phone with <code className="rounded bg-slate-100 px-1 text-xs">+1</code> and send</li>
+              <li>After a successful send, Sign Flow archives the template in DocuSeal so it won&apos;t clutter future lists</li>
+            </ol>
+          </>
         ),
       },
     ],

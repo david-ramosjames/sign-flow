@@ -19,9 +19,14 @@ import {
 } from "@/lib/messaging";
 import { newId, nowIso } from "@/lib/time";
 import { getSignFlowStore } from "@/lib/db";
-import { buildDocusealPrefillFields, templateRequiresDateOfLoss } from "@/lib/docuseal-prefill";
+import {
+  buildDocusealPrefillFields,
+  isSarReleaseTemplate,
+  resolveClientNameForSigningRequest,
+  templateRequiresDateOfLoss,
+} from "@/lib/docuseal-prefill";
 import { normalizeDocusealPublicUrl, normalizeSigningRequestDocusealUrls } from "@/lib/docuseal-public-url";
-import { createSubmission, downloadUrlToBuffer, getSubmission, getTemplate } from "@/services/docuseal-client";
+import { createSubmission, downloadUrlToBuffer, getSubmission, getTemplate, archiveTemplate } from "@/services/docuseal-client";
 import { uploadDropboxFile, getDropboxTemporaryLink } from "@/services/dropbox-client";
 import type { EmailAttachment } from "@/lib/mime-rfc822";
 import { sendTransactionalEmail } from "@/services/email-delivery";
@@ -56,12 +61,21 @@ export async function createLeadAndSigningRequest(
   const leadId = newId("lead");
   const reqId = newId("sig");
 
+  const template = await getTemplate(input.templateId);
+
+  if (templateRequiresDateOfLoss(template.name) && !input.dateOfLoss?.trim()) {
+    throw new Error("Date of loss is required for this contract template.");
+  }
+
+  const clientName = resolveClientNameForSigningRequest(template.name, input.clientName);
+  const language: SupportedLanguage = isSarReleaseTemplate(template.name) ? "en" : input.language;
+
   const lead: Lead = {
     id: leadId,
-    clientName: input.clientName.trim(),
+    clientName,
     phone: input.phone?.trim() || null,
     email: input.email?.trim() || null,
-    language: input.language,
+    language,
     source: input.source || "dashboard",
     createdAt: now,
     updatedAt: now,
@@ -69,23 +83,17 @@ export async function createLeadAndSigningRequest(
     status: "new" satisfies LeadStatus,
   };
 
-  const template = await getTemplate(input.templateId);
-
-  if (templateRequiresDateOfLoss(template.name) && !input.dateOfLoss?.trim()) {
-    throw new Error("Date of loss is required for this contract template.");
-  }
-
   const sentAt = new Date();
   const prefillFields = buildDocusealPrefillFields({
     templateName: template.name,
-    clientName: input.clientName.trim(),
+    clientName,
     dateOfLoss: input.dateOfLoss?.trim() || null,
     sentAt,
   });
 
   const submitters = await createSubmission({
     templateId: input.templateId,
-    clientName: input.clientName.trim(),
+    clientName,
     email: input.email,
     phone: input.phone,
     sendDocusealEmail: false,
@@ -106,7 +114,7 @@ export async function createLeadAndSigningRequest(
     clientName: lead.clientName,
     phone: lead.phone,
     email: lead.email,
-    language: input.language,
+    language,
     templateId: input.templateId,
     templateName: template.name,
     dateOfLoss: input.dateOfLoss?.trim() || null,
@@ -160,7 +168,7 @@ export async function createLeadAndSigningRequest(
   if (input.sendSms && lead.phone) {
     await sendSms(
       lead.phone,
-      signingSmsFromSettings(appSettings, lead.clientName, signingUrl, input.language),
+      signingSmsFromSettings(appSettings, lead.clientName, signingUrl, language),
     );
     signingRequest.sentViaSms = true;
     await appendSigningEvent({ signingRequestId: reqId, leadId, type: "sms_sent", metadata: {} });
@@ -171,7 +179,7 @@ export async function createLeadAndSigningRequest(
       appSettings,
       lead.clientName,
       signingUrl,
-      input.language,
+      language,
     );
     const mail = await sendTransactionalEmail({ to: lead.email, subject, textBody: text, htmlBody: html });
     if (!mail.ok) throw new Error(mail.error);
@@ -188,6 +196,25 @@ export async function createLeadAndSigningRequest(
   signingRequest.updatedAt = nowIso();
   await store.upsertLead(lead);
   await store.upsertSigningRequest(signingRequest);
+
+  if (isSarReleaseTemplate(template.name)) {
+    try {
+      await archiveTemplate(input.templateId);
+      await appendSigningEvent({
+        signingRequestId: reqId,
+        leadId,
+        type: "synced",
+        metadata: { action: "archived_docuseal_template", templateId: input.templateId },
+      });
+    } catch (e) {
+      await appendSigningEvent({
+        signingRequestId: reqId,
+        leadId,
+        type: "failed",
+        metadata: { step: "archive_sar_template", templateId: input.templateId, error: String(e) },
+      });
+    }
+  }
 
   return { lead, signingRequest };
 }

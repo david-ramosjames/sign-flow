@@ -10,7 +10,7 @@ import { processDueReminders } from "@/server/reminder-processor";
 import { createLeadAndSigningRequest } from "@/server/signing-workflow";
 
 const postSchema = z.object({
-  clientName: z.string().min(1),
+  clientName: z.string().optional().nullable(),
   phone: z.string().optional().nullable(),
   email: z
     .preprocess((v) => (v === "" || v === null || v === undefined ? undefined : v), z.string().email().optional())
@@ -109,7 +109,7 @@ export async function POST(req: Request) {
   try {
     const { lead, signingRequest } = await createLeadAndSigningRequest(
       {
-        clientName: parsed.data.clientName,
+        clientName: parsed.data.clientName?.trim() || "",
         phone,
         email,
         language: parsed.data.language,
