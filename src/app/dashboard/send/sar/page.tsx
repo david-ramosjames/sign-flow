@@ -11,6 +11,7 @@ export default function SendSarReleasePage() {
   const router = useRouter();
   const [templates, setTemplates] = useState<DocuSealTemplateSummary[]>([]);
   const [templateId, setTemplateId] = useState<string>("");
+  const [clientName, setClientName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [sendSms, setSendSms] = useState(true);
@@ -122,12 +123,17 @@ export default function SendSarReleasePage() {
             setBusy(false);
             return;
           }
+          if (!clientName.trim()) {
+            setError("Client name is required so SMS and the dashboard use the correct name.");
+            setBusy(false);
+            return;
+          }
           const res = await fetch("/api/signing-requests", {
             method: "POST",
             credentials: "include",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
-              clientName: null,
+              clientName: clientName.trim(),
               dateOfLoss: null,
               phone: phone.trim() || null,
               email: email.trim() || null,
@@ -179,6 +185,20 @@ export default function SendSarReleasePage() {
               Reload list
             </button>
           </p>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-slate-900">Client name</label>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Used in the text message and on the dashboard — not pre-filled on the SAR document.
+          </p>
+          <input
+            required
+            className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            value={clientName}
+            onChange={(e) => setClientName(e.target.value)}
+            placeholder="Jane Doe"
+          />
         </div>
 
         {(outbound.signingSmsEnabled || outbound.signingEmailEnabled) && (

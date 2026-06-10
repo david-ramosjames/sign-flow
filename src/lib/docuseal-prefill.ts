@@ -58,8 +58,8 @@ export function templateRequiresDateOfLoss(templateName: string): boolean {
   return isRjlEnglish2026Template(templateName) || isRjlSpanish2026Template(templateName);
 }
 
-export function templateRequiresClientName(templateName: string): boolean {
-  return !isSarReleaseTemplate(templateName);
+export function templateRequiresClientName(_templateName: string): boolean {
+  return true;
 }
 
 export function templateShowsLanguageChoice(templateName: string): boolean {
@@ -124,12 +124,10 @@ function buildSarReleasePrefill(input: BuildDocusealPrefillInput): DocusealPrefi
   ];
 }
 
-/** Dashboard / SMS label when staff leave client name blank on SAR templates. */
-export function resolveClientNameForSigningRequest(templateName: string, clientName: string | null | undefined): string {
+export function resolveClientNameForSigningRequest(_templateName: string, clientName: string | null | undefined): string {
   const trimmed = clientName?.trim();
   if (trimmed) return trimmed;
-  if (isSarReleaseTemplate(templateName)) return templateName.trim();
-  throw new Error("Client name is required for this template.");
+  throw new Error("Client name is required.");
 }
 
 /** Pre-fill DocuSeal submitter fields (excludes signature). */

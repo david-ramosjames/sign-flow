@@ -74,6 +74,7 @@ const SECTIONS: FaqSection[] = [
             <ol className="mt-2 list-decimal space-y-1 pl-5">
               <li>Create the person&apos;s SAR template in DocuSeal (name must include &quot;SAR&quot;)</li>
               <li>Open Send SAR and select that template</li>
+              <li>Enter the client&apos;s name (used in SMS and on the dashboard)</li>
               <li>Enter phone with <code className="rounded bg-slate-100 px-1 text-xs">+1</code> and send</li>
               <li>After a successful send, Sign Flow archives the template in DocuSeal so it won&apos;t clutter future lists</li>
             </ol>
