@@ -5,24 +5,28 @@ import {
 import { buildRfc822Message, type EmailAttachment } from "@/lib/mime-rfc822";
 export type { EmailAttachment };
 export type SendTransactionalEmailInput = {
-  to: string;
+  /** One recipient or multiple addresses on a single message (shared To line). */
+  to: string | string[];
   subject: string;
   textBody: string;
   htmlBody?: string;
   attachments?: EmailAttachment[];
 };
 
-export type SendTransactionalEmailResult = { ok: true } | { ok: false; error: string };
+function normalizeRecipients(to: string | string[]): string[] {
+  return (Array.isArray(to) ? to : [to]).map((a) => a.trim()).filter(Boolean);
+}
 
 async function sendSendGrid(input: SendTransactionalEmailInput): Promise<boolean> {
   const key = process.env.SENDGRID_API_KEY?.trim();
   const from = process.env.SENDGRID_FROM_EMAIL?.trim();
-  if (!key || !from) return false;
+  const recipients = normalizeRecipients(input.to);
+  if (!key || !from || recipients.length === 0) return false;
   const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
     method: "POST",
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: JSON.stringify({
-      personalizations: [{ to: [{ email: input.to }] }],
+      personalizations: [{ to: recipients.map((email) => ({ email })) }],
       from: { email: from },
       subject: input.subject,
       content: [
@@ -43,6 +47,8 @@ async function sendSendGrid(input: SendTransactionalEmailInput): Promise<boolean
   });
   return res.ok;
 }
+
+export type SendTransactionalEmailResult = { ok: true } | { ok: false; error: string };
 
 async function refreshGoogleAccessToken(): Promise<string | null> {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
@@ -69,9 +75,10 @@ async function refreshGoogleAccessToken(): Promise<string | null> {
 async function sendGmailUserOAuth(input: SendTransactionalEmailInput): Promise<boolean> {
   const from = process.env.GOOGLE_EMAIL_FROM?.trim();
   const access = await refreshGoogleAccessToken();
-  if (!from || !access) return false;
+  const recipients = normalizeRecipients(input.to);
+  if (!from || !access || recipients.length === 0) return false;
   const raw = buildRfc822Message(
-    input.to,
+    recipients,
     from,
     input.subject,
     input.textBody,

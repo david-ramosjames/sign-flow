@@ -42,10 +42,12 @@ const SIGNER_ONLY_FIELDS_LOWER = new Set(
 );
 
 export function isRjlEnglish2026Template(templateName: string): boolean {
+  if (isDeprecatedDocusealTemplate(templateName)) return false;
   return /ramos james law english 2026/i.test(templateName);
 }
 
 export function isRjlSpanish2026Template(templateName: string): boolean {
+  if (isDeprecatedDocusealTemplate(templateName)) return false;
   return /ramos james law spanish 2026/i.test(templateName);
 }
 
@@ -66,12 +68,21 @@ export function templateShowsLanguageChoice(templateName: string): boolean {
   return !isSarReleaseTemplate(templateName);
 }
 
+/** Retired templates kept in DocuSeal for records — hidden from Sign Flow pickers. */
+export function isDeprecatedDocusealTemplate(templateName: string): boolean {
+  return /\bold\b/i.test(templateName);
+}
+
+export function isVisibleDocusealTemplate(t: { name: string; archivedAt?: string | null }): boolean {
+  return !t.archivedAt && !isDeprecatedDocusealTemplate(t.name);
+}
+
 export function filterIntakeTemplates<T extends { name: string; archivedAt?: string | null }>(templates: T[]): T[] {
-  return templates.filter((t) => !t.archivedAt && !isSarReleaseTemplate(t.name));
+  return templates.filter((t) => isVisibleDocusealTemplate(t) && !isSarReleaseTemplate(t.name));
 }
 
 export function filterSarReleaseTemplates<T extends { name: string; archivedAt?: string | null }>(templates: T[]): T[] {
-  return templates.filter((t) => !t.archivedAt && isSarReleaseTemplate(t.name));
+  return templates.filter((t) => isVisibleDocusealTemplate(t) && isSarReleaseTemplate(t.name));
 }
 
 export type DocusealPrefillField = {

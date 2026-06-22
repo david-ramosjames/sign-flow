@@ -21,6 +21,12 @@ export function encodeRfc2047Header(value: string): string {
   return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
 }
 
+/** Normalize one or more addresses for RFC 822 `To:` (comma-separated). */
+export function formatRfc822ToHeader(to: string | string[]): string {
+  const list = (Array.isArray(to) ? to : [to]).map((a) => a.trim()).filter(Boolean);
+  return list.join(", ");
+}
+
 function buildBodyPart(textBody: string, htmlBody?: string): { headers: string[]; body: string } {
   if (!htmlBody) {
     return {
@@ -50,7 +56,7 @@ function buildBodyPart(textBody: string, htmlBody?: string): { headers: string[]
 }
 
 export function buildRfc822Message(
-  to: string,
+  to: string | string[],
   from: string,
   subject: string,
   textBody: string,
@@ -58,7 +64,7 @@ export function buildRfc822Message(
   attachments?: EmailAttachment[],
 ): string {
   const headers = [
-    `To: ${to}`,
+    `To: ${formatRfc822ToHeader(to)}`,
     `From: ${from}`,
     `Subject: ${encodeRfc2047Header(subject)}`,
     "MIME-Version: 1.0",

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSessionUser } from "@/lib/auth/get-session";
 import { docusealAdminTemplateUrl, ensureHttpUrlBase, listTemplates } from "@/services/docuseal-client";
+import { isVisibleDocusealTemplate } from "@/lib/docuseal-prefill";
 import type { DocuSealTemplateSummary } from "@/types/models";
 
 export async function GET() {
@@ -12,7 +13,9 @@ export async function GET() {
   try {
     const rows = await listTemplates();
     const adminBase = process.env.DOCUSEAL_ADMIN_BASE_URL?.trim();
-    const items: DocuSealTemplateSummary[] = rows.map((t) => ({
+    const items: DocuSealTemplateSummary[] = rows
+      .filter((t) => isVisibleDocusealTemplate({ name: t.name, archivedAt: t.archived_at ?? null }))
+      .map((t) => ({
       id: t.id,
       name: t.name,
       slug: t.slug ?? null,
@@ -22,7 +25,7 @@ export async function GET() {
       adminUrl:
         docusealAdminTemplateUrl(t.id) ??
         (adminBase ? `${ensureHttpUrlBase(adminBase)}/templates/${t.id}` : null),
-    }));
+      }));
     return NextResponse.json({ items });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to load templates";

@@ -165,7 +165,7 @@ export async function getGmailDelegatedAccessToken(): Promise<string | null> {
 }
 
 export async function sendGmailViaWorkspaceDelegation(input: {
-  to: string;
+  to: string | string[];
   subject: string;
   textBody: string;
   htmlBody?: string;
@@ -175,7 +175,7 @@ export async function sendGmailViaWorkspaceDelegation(input: {
 }
 
 export async function sendGmailViaWorkspaceDelegationDetailed(input: {
-  to: string;
+  to: string | string[];
   subject: string;
   textBody: string;
   htmlBody?: string;

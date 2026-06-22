@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, startTransition } from "react";
-import { filterIntakeTemplates, isRjlSpanish2026Template, templateRequiresDateOfLoss } from "@/lib/docuseal-prefill";import type { DocuSealTemplateSummary, OutboundDeliverySettings } from "@/types/models";
+import { filterIntakeTemplates, isRjlSpanish2026Template, templateRequiresDateOfLoss } from "@/lib/docuseal-prefill";
+import type { DocuSealTemplateSummary, OutboundDeliverySettings } from "@/types/models";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 
 export default function SendSigningRequestPage() {

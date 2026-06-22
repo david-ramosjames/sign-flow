@@ -492,13 +492,13 @@ export async function applyDocusealCompletionToRequest(input: {
 
   const teamEmails = parseEmailList(completionSettings.teamNotificationEmails);
   if (teamEmails.length > 0) {
-    const pdfUrl = req.signedPdfUrl;
-    let attachments: EmailAttachment[] | undefined;
-    if (pdfUrl) {
+    const base = req.clientName.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-") || "signed";
+    const attachments: EmailAttachment[] = [];
+
+    if (req.signedPdfUrl) {
       try {
-        const pdfBytes = await downloadUrlToBuffer(pdfUrl);
-        const base = req.clientName.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-") || "signed";
-        attachments = [{ filename: `${base}-signed.pdf`, content: pdfBytes, mimeType: "application/pdf" }];
+        const pdfBytes = await downloadUrlToBuffer(req.signedPdfUrl);
+        attachments.push({ filename: `${base}-signed.pdf`, content: pdfBytes, mimeType: "application/pdf" });
       } catch (e) {
         await appendSigningEvent({
           signingRequestId: req.id,
@@ -508,29 +508,52 @@ export async function applyDocusealCompletionToRequest(input: {
         });
       }
     }
-    const { subject, text } = teamCompletedEmailFromSettings(appSettings, {
-      clientName: req.clientName,
-      templateName: req.templateName,
-      documentUrl: documentUrl || "(see attached PDF or check DocuSeal)",
-    });
-    for (const to of teamEmails) {
+
+    if (req.auditCertificateUrl) {
       try {
-        const mail = await sendTransactionalEmail({ to, subject, textBody: text, attachments });
-        if (!mail.ok) throw new Error(mail.error);
-        await appendSigningEvent({
-          signingRequestId: req.id,
-          leadId: req.leadId,
-          type: "email_sent",
-          metadata: { kind: "team_completed", to, attachedPdf: Boolean(attachments?.length) },
-        });
+        const auditBytes = await downloadUrlToBuffer(req.auditCertificateUrl);
+        attachments.push({ filename: `${base}-audit-log.pdf`, content: auditBytes, mimeType: "application/pdf" });
       } catch (e) {
         await appendSigningEvent({
           signingRequestId: req.id,
           leadId: req.leadId,
           type: "failed",
-          metadata: { step: "team_completed_email", to, error: String(e) },
+          metadata: { step: "team_completed_audit", error: String(e) },
         });
       }
+    }
+
+    const { subject, text } = teamCompletedEmailFromSettings(appSettings, {
+      clientName: req.clientName,
+      templateName: req.templateName,
+      documentUrl: documentUrl || "(see attached PDF or check DocuSeal)",
+    });
+    try {
+      const mail = await sendTransactionalEmail({
+        to: teamEmails,
+        subject,
+        textBody: text,
+        attachments: attachments.length ? attachments : undefined,
+      });
+      if (!mail.ok) throw new Error(mail.error);
+      await appendSigningEvent({
+        signingRequestId: req.id,
+        leadId: req.leadId,
+        type: "email_sent",
+        metadata: {
+          kind: "team_completed",
+          to: teamEmails.join(", "),
+          attachedPdf: attachments.some((a) => a.filename.endsWith("-signed.pdf")),
+          attachedAudit: attachments.some((a) => a.filename.endsWith("-audit-log.pdf")),
+        },
+      });
+    } catch (e) {
+      await appendSigningEvent({
+        signingRequestId: req.id,
+        leadId: req.leadId,
+        type: "failed",
+        metadata: { step: "team_completed_email", to: teamEmails.join(", "), error: String(e) },
+      });
     }
   }
 
