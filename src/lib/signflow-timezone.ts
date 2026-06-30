@@ -124,3 +124,9 @@ export function formatSignflowDate(input: Date | string | number): string {
     year: "numeric",
   }).format(toDate(input));
 }
+
+/** US Central calendar date as M/D/YYYY (HIPAA today-date fields). */
+export function formatSignflowUsSlashDate(input: Date | string | number): string {
+  const { month, day, year } = getSignflowCalendarParts(toDate(input));
+  return `${month}/${day}/${year}`;
+}

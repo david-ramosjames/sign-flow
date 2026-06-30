@@ -6,8 +6,9 @@ import { signOutFirebaseClient } from "@/lib/firebase/client";
 
 const nav = [
   { href: "/dashboard", label: "Requests" },
-  { href: "/dashboard/send", label: "Send request" },
+  { href: "/dashboard/send", label: "Send" },
   { href: "/dashboard/send/sar", label: "Send SAR" },
+  { href: "/dashboard/send/hipaa", label: "Send HIPAA" },
   { href: "/dashboard/signed", label: "Signed documents" },
   { href: "/dashboard/faq", label: "FAQ" },
   { href: "/admin", label: "Admin" },

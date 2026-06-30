@@ -48,6 +48,31 @@ export type SigningEventType =
   | "deleted"
   | "failed";
 
+export type SigningFormKind = "contract" | "sar" | "hipaa";
+
+export type HipaaFormPrefill = {
+  lastName: string;
+  firstName: string;
+  middleName: string | null;
+  otherName: string | null;
+  /** yyyy-MM-dd */
+  dateOfBirth: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zipCode: string | null;
+  phone: string | null;
+  altPhone: string | null;
+  email: string | null;
+  legalAcknowledged: boolean;
+  allHealthAcknowledged: boolean;
+  isMinor: boolean;
+  nameAuthorizedRepForMinor: string | null;
+  minorRepParent: boolean;
+  minorRepGuardian: boolean;
+  minorRepOther: boolean;
+};
+
 export type SigningRequest = {
   id: string;
   leadId: string;
@@ -60,6 +85,10 @@ export type SigningRequest = {
   templateName: string;
   /** Date of loss (yyyy-MM-dd) for contract pre-fill; used on RJL English/Spanish 2026 templates. */
   dateOfLoss: string | null;
+  /** contract | sar | hipaa — derived from template when sent. */
+  formKind: SigningFormKind | null;
+  /** Stored HIPAA intake fields when formKind is hipaa. */
+  hipaaPrefill: HipaaFormPrefill | null;
   docusealSubmissionId: number | null;
   docusealSubmitterId: number | null;
   /** Primary signing link (DocuSeal embed / slug URL). */

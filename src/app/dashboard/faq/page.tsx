@@ -37,9 +37,14 @@ const SECTIONS: FaqSection[] = [
           <ol className="mt-2 list-decimal space-y-1 pl-5">
             <li>
               Click{" "}
+              <Link href="/dashboard/send/contract" className="font-medium text-[color:var(--brand-navy)] underline underline-offset-2">
+                Send contract
+              </Link>{" "}
+              (from the{" "}
               <Link href="/dashboard/send" className="font-medium text-[color:var(--brand-navy)] underline underline-offset-2">
-                Send request
-              </Link>
+                Send
+              </Link>{" "}
+              menu)
             </li>
             <li>Select the correct template</li>
             <li>Enter the client&apos;s name</li>
@@ -56,6 +61,7 @@ const SECTIONS: FaqSection[] = [
             <li>English Intake Contract</li>
             <li>Spanish Intake Contract</li>
             <li>SAR (release) — one DocuSeal template per person; name must include “SAR”</li>
+            <li>HIPAA form — English only; name must include “HIPAA”</li>
           </ul>
         ),
       },
@@ -77,6 +83,28 @@ const SECTIONS: FaqSection[] = [
               <li>Enter the client&apos;s name (used in SMS and on the dashboard)</li>
               <li>Enter phone with <code className="rounded bg-slate-100 px-1 text-xs">+1</code> and send</li>
               <li>After a successful send, Sign Flow archives the template in DocuSeal so it won&apos;t clutter future lists</li>
+            </ol>
+          </>
+        ),
+      },
+      {
+        question: "How do I send a HIPAA form?",
+        answer: (
+          <>
+            <p className="mb-2">
+              Use{" "}
+              <Link href="/dashboard/send/hipaa" className="font-medium text-[color:var(--brand-navy)] underline underline-offset-2">
+                Send HIPAA
+              </Link>
+              . That page only lists HIPAA templates and collects the fields needed for the RJL HIPAA Form (English only).
+            </p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5">
+              <li>Select the HIPAA template</li>
+              <li>Enter first and last name (required)</li>
+              <li>Fill optional demographics as needed</li>
+              <li>Confirm the legal and all-health authorizations</li>
+              <li>Enter delivery phone with <code className="rounded bg-slate-100 px-1 text-xs">+1</code> and send</li>
+              <li>The client completes the signature on the document</li>
             </ol>
           </>
         ),

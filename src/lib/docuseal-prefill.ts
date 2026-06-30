@@ -6,6 +6,16 @@ import {
   getSignflowCalendarParts,
   parseIsoDateOnly,
 } from "@/lib/signflow-timezone";
+import {
+  buildHipaaDocusealPrefillFields,
+  HIPAA_SIGNER_ONLY_LOWER,
+  hipaaClientDisplayName,
+  validateHipaaPrefill,
+} from "@/lib/hipaa-prefill";
+import type { HipaaFormPrefill, SigningFormKind } from "@/types/models";
+
+export type { HipaaFormPrefill };
+export { validateHipaaPrefill, hipaaClientDisplayName };
 
 /** DocuSeal field names on "Contract Ramos James Law ENGLISH 2026" (and variants). */
 export const RJL_ENGLISH_2026_FIELD = {
@@ -38,6 +48,7 @@ const SIGNER_ONLY_FIELDS_LOWER = new Set(
     RJL_ENGLISH_2026_FIELD.signature,
     RJL_SPANISH_2026_FIELD.signature,
     SAR_RELEASE_FIELD.signature,
+    ...HIPAA_SIGNER_ONLY_LOWER,
   ].map((n) => n.toLowerCase()),
 );
 
@@ -56,16 +67,25 @@ export function isSarReleaseTemplate(templateName: string): boolean {
   return /\bsar\b/i.test(templateName);
 }
 
+/** RJL HIPAA Form — English only. */
+export function isRjlHipaaTemplate(templateName: string): boolean {
+  if (isDeprecatedDocusealTemplate(templateName)) return false;
+  if (isSarReleaseTemplate(templateName)) return false;
+  return /\bhipaa\b/i.test(templateName);
+}
+
+export function detectSigningFormKind(templateName: string): SigningFormKind {
+  if (isSarReleaseTemplate(templateName)) return "sar";
+  if (isRjlHipaaTemplate(templateName)) return "hipaa";
+  return "contract";
+}
+
 export function templateRequiresDateOfLoss(templateName: string): boolean {
   return isRjlEnglish2026Template(templateName) || isRjlSpanish2026Template(templateName);
 }
 
-export function templateRequiresClientName(_templateName: string): boolean {
-  return true;
-}
-
 export function templateShowsLanguageChoice(templateName: string): boolean {
-  return !isSarReleaseTemplate(templateName);
+  return detectSigningFormKind(templateName) === "contract";
 }
 
 /** Retired templates kept in DocuSeal for records — hidden from Sign Flow pickers. */
@@ -77,12 +97,22 @@ export function isVisibleDocusealTemplate(t: { name: string; archivedAt?: string
   return !t.archivedAt && !isDeprecatedDocusealTemplate(t.name);
 }
 
-export function filterIntakeTemplates<T extends { name: string; archivedAt?: string | null }>(templates: T[]): T[] {
-  return templates.filter((t) => isVisibleDocusealTemplate(t) && !isSarReleaseTemplate(t.name));
+export function filterContractTemplates<T extends { name: string; archivedAt?: string | null }>(templates: T[]): T[] {
+  return templates.filter(
+    (t) =>
+      isVisibleDocusealTemplate(t) && !isSarReleaseTemplate(t.name) && !isRjlHipaaTemplate(t.name),
+  );
 }
+
+/** @deprecated Use filterContractTemplates */
+export const filterIntakeTemplates = filterContractTemplates;
 
 export function filterSarReleaseTemplates<T extends { name: string; archivedAt?: string | null }>(templates: T[]): T[] {
   return templates.filter((t) => isVisibleDocusealTemplate(t) && isSarReleaseTemplate(t.name));
+}
+
+export function filterHipaaTemplates<T extends { name: string; archivedAt?: string | null }>(templates: T[]): T[] {
+  return templates.filter((t) => isVisibleDocusealTemplate(t) && isRjlHipaaTemplate(t.name));
 }
 
 export type DocusealPrefillField = {
@@ -96,6 +126,7 @@ export type BuildDocusealPrefillInput = {
   clientName: string;
   /** ISO date (yyyy-MM-dd) for date of loss. */
   dateOfLoss: string | null;
+  hipaaPrefill?: HipaaFormPrefill | null;
   /** When the signing request is sent; defaults to now (US Central calendar for “today”). */
   sentAt?: Date;
 };
@@ -135,7 +166,16 @@ function buildSarReleasePrefill(input: BuildDocusealPrefillInput): DocusealPrefi
   ];
 }
 
-export function resolveClientNameForSigningRequest(_templateName: string, clientName: string | null | undefined): string {
+export function resolveClientNameForSigningRequest(
+  templateName: string,
+  clientName: string | null | undefined,
+  hipaaPrefill?: HipaaFormPrefill | null,
+): string {
+  if (isRjlHipaaTemplate(templateName) && hipaaPrefill) {
+    const name = hipaaClientDisplayName(hipaaPrefill);
+    if (name) return name;
+    throw new Error("First and last name are required for the HIPAA form.");
+  }
   const trimmed = clientName?.trim();
   if (trimmed) return trimmed;
   throw new Error("Client name is required.");
@@ -145,6 +185,9 @@ export function resolveClientNameForSigningRequest(_templateName: string, client
 export function buildDocusealPrefillFields(input: BuildDocusealPrefillInput): DocusealPrefillField[] {
   if (isSarReleaseTemplate(input.templateName)) {
     return buildSarReleasePrefill(input);
+  }
+  if (isRjlHipaaTemplate(input.templateName) && input.hipaaPrefill) {
+    return buildHipaaDocusealPrefillFields(input.hipaaPrefill, input.sentAt);
   }
 
   const dol = input.dateOfLoss ? parseIsoDateOnly(input.dateOfLoss) : null;

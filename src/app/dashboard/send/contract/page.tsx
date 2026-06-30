@@ -2,18 +2,20 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, startTransition } from "react";
-import { filterSarReleaseTemplates } from "@/lib/docuseal-prefill";
+import { useEffect, useMemo, useState, startTransition } from "react";
+import { filterContractTemplates, isRjlSpanish2026Template, templateRequiresDateOfLoss } from "@/lib/docuseal-prefill";
 import type { DocuSealTemplateSummary, OutboundDeliverySettings } from "@/types/models";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 
-export default function SendSarReleasePage() {
+export default function SendContractPage() {
   const router = useRouter();
   const [templates, setTemplates] = useState<DocuSealTemplateSummary[]>([]);
   const [templateId, setTemplateId] = useState<string>("");
   const [clientName, setClientName] = useState("");
+  const [dateOfLoss, setDateOfLoss] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [language, setLanguage] = useState<"en" | "es">("en");
   const [sendSms, setSendSms] = useState(true);
   const [sendEmail, setSendEmail] = useState(false);
   const [reminderEnabled, setReminderEnabled] = useState(true);
@@ -34,7 +36,7 @@ export default function SendSarReleasePage() {
     }
     const j = (await res.json()) as { items: DocuSealTemplateSummary[] };
     startTransition(() => {
-      const list = filterSarReleaseTemplates(j.items);
+      const list = filterContractTemplates(j.items);
       setTemplates(list);
       setTemplateId((prev) => {
         if (prev && list.some((t) => String(t.id) === prev)) return prev;
@@ -70,6 +72,18 @@ export default function SendSarReleasePage() {
 
   const canDeliver = outbound.signingSmsEnabled || outbound.signingEmailEnabled;
 
+  const selectedTemplate = useMemo(
+    () => templates.find((t) => String(t.id) === templateId),
+    [templates, templateId],
+  );
+  const needsDateOfLoss = selectedTemplate ? templateRequiresDateOfLoss(selectedTemplate.name) : false;
+
+  useEffect(() => {
+    if (selectedTemplate && isRjlSpanish2026Template(selectedTemplate.name)) {
+      setLanguage("es");
+    }
+  }, [selectedTemplate?.id, selectedTemplate?.name]);
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
@@ -78,10 +92,9 @@ export default function SendSarReleasePage() {
             ← All send types
           </Link>
         </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Send SAR release</h1>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Send contract</h1>
         <p className="mt-1 text-sm text-[color:var(--muted)]">
-          One-time release per person. Create the template in DocuSeal first (name must include &quot;SAR&quot;), send it
-          here, then it is archived automatically so it won&apos;t clutter future lists.
+          English or Spanish intake contracts. Pre-fills client name, date of loss, and today&apos;s date (US Central).
         </p>
       </div>
 
@@ -90,14 +103,18 @@ export default function SendSarReleasePage() {
       {!canDeliver ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
           <strong>Signing delivery is disabled.</strong> An admin must enable SMS and/or email under{" "}
-          <strong>Admin → Messages → Signing request delivery</strong>.
+          <strong>Admin → Messages → Signing request delivery</strong> before you can send requests.
         </div>
       ) : null}
 
       {quoReady === false && sendSms && outbound.signingSmsEnabled ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-          <strong>SMS will not send</strong> until Quo is configured. Include <code className="text-xs">+1</code> on the
-          phone number.
+          <strong>SMS will not send</strong> until <code className="text-xs">QUO_API_KEY</code> and{" "}
+          <code className="text-xs">QUO_FROM_NUMBER</code> (or <code className="text-xs">QUO_PHONE_NUMBER_ID</code>) are
+          set — use a number from your Quo workspace, not another provider. US numbers require Quo carrier (A2P)
+          registration. For local testing without Quo, set{" "}
+          <code className="text-xs">QUO_SMS_MOCK=true</code>
+          {outbound.signingEmailEnabled ? " or uncheck SMS and use email only." : "."}
         </div>
       ) : null}
 
@@ -109,7 +126,7 @@ export default function SendSarReleasePage() {
           setError(null);
           const tid = Number(templateId);
           if (!Number.isFinite(tid) || tid <= 0) {
-            setError("Select an SAR template.");
+            setError("Select a template.");
             setBusy(false);
             return;
           }
@@ -123,8 +140,13 @@ export default function SendSarReleasePage() {
             setBusy(false);
             return;
           }
+          if (needsDateOfLoss && !dateOfLoss.trim()) {
+            setError("Date of loss is required for this contract template.");
+            setBusy(false);
+            return;
+          }
           if (!clientName.trim()) {
-            setError("Client name is required so SMS and the dashboard use the correct name.");
+            setError("Client name is required.");
             setBusy(false);
             return;
           }
@@ -134,10 +156,10 @@ export default function SendSarReleasePage() {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               clientName: clientName.trim(),
-              dateOfLoss: null,
+              dateOfLoss: needsDateOfLoss ? dateOfLoss.trim() : null,
               phone: phone.trim() || null,
               email: email.trim() || null,
-              language: "en",
+              language,
               templateId: tid,
               sendSms,
               sendEmail,
@@ -155,7 +177,7 @@ export default function SendSarReleasePage() {
         }}
       >
         <div>
-          <label className="text-sm font-medium text-slate-900">SAR template (this person)</label>
+          <label className="text-sm font-medium text-slate-900">Template</label>
           <select
             required
             className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
@@ -164,9 +186,7 @@ export default function SendSarReleasePage() {
             onChange={(e) => setTemplateId(e.target.value)}
           >
             {loadingTemplates ? <option>Loading…</option> : null}
-            {!loadingTemplates && templates.length === 0 ? (
-              <option value="">No active SAR templates — create one in DocuSeal</option>
-            ) : null}
+            {!loadingTemplates && templates.length === 0 ? <option value="">No templates</option> : null}
             {templates.map((t) => (
               <option key={t.id} value={String(t.id)}>
                 {t.name}
@@ -174,8 +194,7 @@ export default function SendSarReleasePage() {
             ))}
           </select>
           <p className="mt-2 text-xs text-slate-500">
-            Only templates whose name includes &quot;SAR&quot; appear here. After a successful send, the template is
-            archived in DocuSeal.{" "}
+            Added or renamed a template in DocuSeal?{" "}
             <button
               type="button"
               className="font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
@@ -189,9 +208,6 @@ export default function SendSarReleasePage() {
 
         <div>
           <label className="text-sm font-medium text-slate-900">Client name</label>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Used in the text message and on the dashboard — not pre-filled on the SAR document.
-          </p>
           <input
             required
             className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
@@ -200,6 +216,22 @@ export default function SendSarReleasePage() {
             placeholder="Jane Doe"
           />
         </div>
+        {needsDateOfLoss ? (
+          <div>
+            <label className="text-sm font-medium text-slate-900">Date of loss</label>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Pre-fills date-of-loss fields on the contract. Today&apos;s date is filled automatically when you send (US
+              Central).
+            </p>
+            <input
+              required
+              type="date"
+              className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              value={dateOfLoss}
+              onChange={(e) => setDateOfLoss(e.target.value)}
+            />
+          </div>
+        ) : null}
 
         {(outbound.signingSmsEnabled || outbound.signingEmailEnabled) && (
           <div
@@ -214,7 +246,6 @@ export default function SendSarReleasePage() {
                 <label className="text-sm font-medium text-slate-900">Phone</label>
                 <p className="mt-0.5 text-xs text-slate-500">Include country code (e.g. +1 for US).</p>
                 <input
-                  required={sendSms && !sendEmail}
                   className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
@@ -226,7 +257,6 @@ export default function SendSarReleasePage() {
               <div>
                 <label className="text-sm font-medium text-slate-900">Email</label>
                 <input
-                  required={sendEmail && !sendSms}
                   className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                   type="email"
                   value={email}
@@ -238,6 +268,19 @@ export default function SendSarReleasePage() {
           </div>
         )}
 
+        <div>
+          <label className="text-sm font-medium text-slate-900">Language</label>
+          <div className="mt-2 flex gap-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="radio" name="lang" checked={language === "en"} onChange={() => setLanguage("en")} />
+              English
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="radio" name="lang" checked={language === "es"} onChange={() => setLanguage("es")} />
+              Spanish
+            </label>
+          </div>
+        </div>
         {outbound.signingSmsEnabled && outbound.signingEmailEnabled ? (
           <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
             <div className="text-sm font-semibold text-slate-900">Delivery</div>
@@ -258,11 +301,11 @@ export default function SendSarReleasePage() {
         </label>
 
         <button
-          disabled={busy || !canDeliver || (!loadingTemplates && templates.length === 0)}
+          disabled={busy || !canDeliver}
           type="submit"
           className="w-full rounded-xl bg-[color:var(--accent)] px-4 py-3 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
         >
-          {busy ? "Sending…" : "Send SAR release"}
+          {busy ? "Sending…" : "Send contract"}
         </button>
       </form>
     </div>

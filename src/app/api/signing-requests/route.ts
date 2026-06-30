@@ -8,6 +8,58 @@ import { mergeOutboundDelivery } from "@/lib/outbound-delivery";
 import { normalizeSigningRequestForDisplay } from "@/lib/signing-request-active";
 import { processDueReminders } from "@/server/reminder-processor";
 import { createLeadAndSigningRequest } from "@/server/signing-workflow";
+import type { HipaaFormPrefill } from "@/types/models";
+
+const emptyToNull = z.preprocess(
+  (v) => (v === "" || v === null || v === undefined ? null : v),
+  z.string().nullable(),
+);
+
+const hipaaPrefillSchema = z.object({
+  lastName: z.string().min(1),
+  firstName: z.string().min(1),
+  middleName: emptyToNull.optional(),
+  otherName: emptyToNull.optional(),
+  dateOfBirth: emptyToNull.optional(),
+  address: emptyToNull.optional(),
+  city: emptyToNull.optional(),
+  state: emptyToNull.optional(),
+  zipCode: emptyToNull.optional(),
+  phone: emptyToNull.optional(),
+  altPhone: emptyToNull.optional(),
+  email: emptyToNull.optional(),
+  legalAcknowledged: z.boolean(),
+  allHealthAcknowledged: z.boolean(),
+  isMinor: z.boolean(),
+  nameAuthorizedRepForMinor: emptyToNull.optional(),
+  minorRepParent: z.boolean(),
+  minorRepGuardian: z.boolean(),
+  minorRepOther: z.boolean(),
+});
+
+function normalizeHipaaPrefillFromApi(raw: z.infer<typeof hipaaPrefillSchema>): HipaaFormPrefill {
+  return {
+    lastName: raw.lastName,
+    firstName: raw.firstName,
+    middleName: raw.middleName ?? null,
+    otherName: raw.otherName ?? null,
+    dateOfBirth: raw.dateOfBirth ?? null,
+    address: raw.address ?? null,
+    city: raw.city ?? null,
+    state: raw.state ?? null,
+    zipCode: raw.zipCode ?? null,
+    phone: raw.phone ?? null,
+    altPhone: raw.altPhone ?? null,
+    email: raw.email ?? null,
+    legalAcknowledged: raw.legalAcknowledged,
+    allHealthAcknowledged: raw.allHealthAcknowledged,
+    isMinor: raw.isMinor,
+    nameAuthorizedRepForMinor: raw.nameAuthorizedRepForMinor ?? null,
+    minorRepParent: raw.minorRepParent,
+    minorRepGuardian: raw.minorRepGuardian,
+    minorRepOther: raw.minorRepOther,
+  };
+}
 
 const postSchema = z.object({
   clientName: z.string().optional().nullable(),
@@ -24,6 +76,7 @@ const postSchema = z.object({
     .preprocess((v) => (v === "" || v === null || v === undefined ? null : v), z.string().optional())
     .nullable()
     .optional(),
+  hipaaPrefill: hipaaPrefillSchema.optional().nullable(),
   source: z.string().optional(),
   assignedTo: z.string().optional().nullable(),
 });
@@ -116,6 +169,9 @@ export async function POST(req: Request) {
         source: parsed.data.source ?? "dashboard",
         templateId: parsed.data.templateId,
         dateOfLoss: parsed.data.dateOfLoss?.trim() || null,
+        hipaaPrefill: parsed.data.hipaaPrefill
+          ? normalizeHipaaPrefillFromApi(parsed.data.hipaaPrefill)
+          : null,
         sendSms: parsed.data.sendSms,
         sendEmail: parsed.data.sendEmail,
         reminderEnabled: parsed.data.reminderEnabled,

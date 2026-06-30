@@ -156,6 +156,26 @@ export default function SigningRequestDetailPage() {
                 <dd className="text-slate-800">{item.dateOfLoss}</dd>
               </div>
             ) : null}
+            {item.formKind === "hipaa" && item.hipaaPrefill ? (
+              <>
+                <div>
+                  <dt className="text-xs font-medium uppercase text-slate-500">Form type</dt>
+                  <dd className="text-slate-800">HIPAA</dd>
+                </div>
+                {item.hipaaPrefill.dateOfBirth ? (
+                  <div>
+                    <dt className="text-xs font-medium uppercase text-slate-500">Date of birth</dt>
+                    <dd className="text-slate-800">{item.hipaaPrefill.dateOfBirth}</dd>
+                  </div>
+                ) : null}
+                {item.hipaaPrefill.isMinor ? (
+                  <div>
+                    <dt className="text-xs font-medium uppercase text-slate-500">Minor</dt>
+                    <dd className="text-slate-800">Yes</dd>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
             <div>
               <dt className="text-xs font-medium uppercase text-slate-500">Lead source</dt>
               <dd className="text-slate-800">{lead?.source ?? "—"}</dd>

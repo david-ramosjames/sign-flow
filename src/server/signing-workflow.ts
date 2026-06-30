@@ -21,9 +21,12 @@ import { newId, nowIso } from "@/lib/time";
 import { getSignFlowStore } from "@/lib/db";
 import {
   buildDocusealPrefillFields,
+  detectSigningFormKind,
+  isRjlHipaaTemplate,
   isSarReleaseTemplate,
   resolveClientNameForSigningRequest,
   templateRequiresDateOfLoss,
+  validateHipaaPrefill,
 } from "@/lib/docuseal-prefill";
 import { normalizeDocusealPublicUrl, normalizeSigningRequestDocusealUrls } from "@/lib/docuseal-public-url";
 import { createSubmission, downloadUrlToBuffer, getSubmission, getTemplate, archiveTemplate } from "@/services/docuseal-client";
@@ -33,7 +36,7 @@ import { sendTransactionalEmail } from "@/services/email-delivery";
 import { sendSms } from "@/services/quo-service";
 import { appendSigningEvent } from "@/services/signing-events";
 import { isActiveSigningRequest, isCancelledSigningRequest } from "@/lib/signing-request-active";
-import type { Lead, LeadStatus, SigningRequest, SupportedLanguage } from "@/types/models";
+import type { HipaaFormPrefill, Lead, LeadStatus, SigningRequest, SupportedLanguage } from "@/types/models";
 
 export type CreateSigningRequestInput = {
   clientName: string;
@@ -44,6 +47,7 @@ export type CreateSigningRequestInput = {
   templateId: number;
   /** yyyy-MM-dd; required for templates that pre-fill date-of-loss fields. */
   dateOfLoss: string | null;
+  hipaaPrefill?: HipaaFormPrefill | null;
   sendSms: boolean;
   sendEmail: boolean;
   reminderEnabled: boolean;
@@ -62,13 +66,26 @@ export async function createLeadAndSigningRequest(
   const reqId = newId("sig");
 
   const template = await getTemplate(input.templateId);
+  const formKind = detectSigningFormKind(template.name);
 
   if (templateRequiresDateOfLoss(template.name) && !input.dateOfLoss?.trim()) {
     throw new Error("Date of loss is required for this contract template.");
   }
 
-  const clientName = resolveClientNameForSigningRequest(template.name, input.clientName);
-  const language: SupportedLanguage = isSarReleaseTemplate(template.name) ? "en" : input.language;
+  if (isRjlHipaaTemplate(template.name)) {
+    if (!input.hipaaPrefill) throw new Error("HIPAA form data is required.");
+    validateHipaaPrefill(input.hipaaPrefill);
+  }
+
+  const clientName = resolveClientNameForSigningRequest(
+    template.name,
+    input.clientName,
+    input.hipaaPrefill,
+  );
+  const language: SupportedLanguage =
+    formKind === "contract" ? input.language : "en";
+
+  const hipaaPrefill = isRjlHipaaTemplate(template.name) ? (input.hipaaPrefill ?? null) : null;
 
   const lead: Lead = {
     id: leadId,
@@ -88,6 +105,7 @@ export async function createLeadAndSigningRequest(
     templateName: template.name,
     clientName,
     dateOfLoss: input.dateOfLoss?.trim() || null,
+    hipaaPrefill,
     sentAt,
   });
 
@@ -118,6 +136,8 @@ export async function createLeadAndSigningRequest(
     templateId: input.templateId,
     templateName: template.name,
     dateOfLoss: input.dateOfLoss?.trim() || null,
+    formKind,
+    hipaaPrefill,
     docusealSubmissionId: primary.submission_id,
     docusealSubmitterId: primary.id ?? null,
     signingUrl,
