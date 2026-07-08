@@ -5,7 +5,7 @@ import {
 import { buildRfc822Message, type EmailAttachment } from "@/lib/mime-rfc822";
 export type { EmailAttachment };
 export type SendTransactionalEmailInput = {
-  /** One recipient or multiple addresses on a single message (shared To line). */
+  /** Recipient address, or multiple addresses on one message (shared To line). */
   to: string | string[];
   subject: string;
   textBody: string;

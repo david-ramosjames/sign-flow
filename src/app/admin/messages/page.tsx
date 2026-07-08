@@ -401,8 +401,8 @@ export default function AdminMessagesPage() {
           <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-900">After signing — team email</h2>
             <p className="mt-1 text-xs text-slate-600">
-              Notifies your team when a document is signed. All addresses below receive one email with the signed PDF and
-              audit log attached when available. Placeholders:{" "}
+              Notifies your team when a document is signed. Each address below receives its own email with the signed PDF
+              and audit log attached when available. Placeholders:{" "}
               <code className="text-[11px]">{"{{clientName}}"}</code>, <code className="text-[11px]">{"{{templateName}}"}</code>,{" "}
               <code className="text-[11px]">{"{{documentUrl}}"}</code>, <code className="text-[11px]">{"{{firm}}"}</code>.
             </p>

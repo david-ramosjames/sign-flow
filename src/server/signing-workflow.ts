@@ -548,31 +548,49 @@ export async function applyDocusealCompletionToRequest(input: {
       templateName: req.templateName,
       documentUrl: documentUrl || "(see attached PDF or check DocuSeal)",
     });
-    try {
-      const mail = await sendTransactionalEmail({
-        to: teamEmails,
-        subject,
-        textBody: text,
-        attachments: attachments.length ? attachments : undefined,
-      });
-      if (!mail.ok) throw new Error(mail.error);
-      await appendSigningEvent({
-        signingRequestId: req.id,
-        leadId: req.leadId,
-        type: "email_sent",
-        metadata: {
-          kind: "team_completed",
-          to: teamEmails.join(", "),
-          attachedPdf: attachments.some((a) => a.filename.endsWith("-signed.pdf")),
-          attachedAudit: attachments.some((a) => a.filename.endsWith("-audit-log.pdf")),
-        },
-      });
-    } catch (e) {
+
+    const sentTo: string[] = [];
+    for (const email of teamEmails) {
+      try {
+        const mail = await sendTransactionalEmail({
+          to: email,
+          subject,
+          textBody: text,
+          attachments: attachments.length ? attachments : undefined,
+        });
+        if (!mail.ok) throw new Error(mail.error);
+        sentTo.push(email);
+        await appendSigningEvent({
+          signingRequestId: req.id,
+          leadId: req.leadId,
+          type: "email_sent",
+          metadata: {
+            kind: "team_completed",
+            to: email,
+            attachedPdf: attachments.some((a) => a.filename.endsWith("-signed.pdf")),
+            attachedAudit: attachments.some((a) => a.filename.endsWith("-audit-log.pdf")),
+          },
+        });
+      } catch (e) {
+        await appendSigningEvent({
+          signingRequestId: req.id,
+          leadId: req.leadId,
+          type: "failed",
+          metadata: { step: "team_completed_email", to: email, error: String(e) },
+        });
+      }
+    }
+
+    if (sentTo.length === 0 && teamEmails.length > 0) {
       await appendSigningEvent({
         signingRequestId: req.id,
         leadId: req.leadId,
         type: "failed",
-        metadata: { step: "team_completed_email", to: teamEmails.join(", "), error: String(e) },
+        metadata: {
+          step: "team_completed_email",
+          to: teamEmails.join(", "),
+          error: "All team completion emails failed.",
+        },
       });
     }
   }
