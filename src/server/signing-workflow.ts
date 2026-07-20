@@ -1,4 +1,4 @@
-import { computeNextReminderAt } from "@/lib/reminder-cadence";
+import { clampToReminderSendWindow, computeNextReminderAt, isWithinReminderSendWindow } from "@/lib/reminder-cadence";
 import { mergeReminderSchedule } from "@/lib/reminder-schedule";
 import {
   mergeCompletionNotifications,
@@ -624,7 +624,10 @@ export async function markSigningViewedFromWebhook(submissionId: number): Promis
   }
 }
 
-export async function runReminderForRequest(req: SigningRequest): Promise<SigningRequest | null> {
+/** `"deferred"` = due but outside 7 AM–8 PM US Central; nextReminderAt was pushed to the window. */
+export async function runReminderForRequest(
+  req: SigningRequest,
+): Promise<SigningRequest | "deferred" | null> {
   req = await repairStoredDocusealUrls(req);
   if (!isActiveSigningRequest(req) || !req.reminderEnabled || !req.signingUrl) return null;
   if (
@@ -650,6 +653,15 @@ export async function runReminderForRequest(req: SigningRequest): Promise<Signin
   if (!req.sentAt) return null;
   const next = req.nextReminderAt ? new Date(req.nextReminderAt) : null;
   if (!next || next.getTime() > Date.now()) return null;
+
+  // Never text/email clients overnight — hold until the next 7 AM–8 PM US Central window.
+  if (!isWithinReminderSendWindow(new Date())) {
+    const reopen = clampToReminderSendWindow(new Date());
+    req.nextReminderAt = reopen.toISOString();
+    req.updatedAt = nowIso();
+    await store.upsertSigningRequest(req);
+    return "deferred";
+  }
 
   const sentAt = new Date(req.sentAt);
   let smsSent = false;

@@ -475,8 +475,9 @@ export default function AdminMessagesPage() {
           <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-900">Reminder schedule</h2>
             <p className="mt-1 text-xs text-slate-600">
-              After the initial send: first nudge, then next calendar morning at the hour below (after the first step), then hours
-              after that morning.
+              After the initial send: first nudge, then next calendar morning at the hour below (after the first step), then
+              hours after that morning. Reminders only go out between <strong>7:00 AM and 8:00 PM US Central</strong> — if a
+              slot would fall outside that window, it is moved to the next morning at 7:00 AM.
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="block text-xs font-medium text-slate-600">
@@ -491,14 +492,18 @@ export default function AdminMessagesPage() {
                 />
               </label>
               <label className="block text-xs font-medium text-slate-600">
-                Second reminder — local hour (0–23)
+                Second reminder — local hour (7–20, US Central)
                 <input
                   type="number"
-                  min={0}
-                  max={23}
+                  min={7}
+                  max={20}
                   className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                   value={rem.secondReminderLocalHour}
-                  onChange={(e) => setRem((r) => ({ ...r, secondReminderLocalHour: Number(e.target.value) || 9 }))}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    const hour = Number.isFinite(n) ? Math.min(20, Math.max(7, n)) : 9;
+                    setRem((r) => ({ ...r, secondReminderLocalHour: hour }));
+                  }}
                 />
               </label>
               <label className="block text-xs font-medium text-slate-600">

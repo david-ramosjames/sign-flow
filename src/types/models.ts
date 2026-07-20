@@ -185,7 +185,7 @@ export type OutboundDeliverySettings = {
 /** Drives `computeNextReminderAt` when present on `AppSettings`. */
 export type ReminderScheduleSettings = {
   firstReminderAfterSendMinutes: number;
-  /** Second reminder lands on the calendar day after (first send + first offset), at this hour US Central. */
+  /** Second reminder lands on the calendar day after (first send + first offset), at this hour US Central (7–20). */
   secondReminderLocalHour: number;
   thirdReminderHoursAfterSecond: number;
   maxAutoReminders: number;

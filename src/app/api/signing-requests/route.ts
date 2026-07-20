@@ -96,7 +96,7 @@ export async function GET() {
     const leadsById = Object.fromEntries(leads.map((l) => [l.id, l]));
     const outboundDelivery = mergeOutboundDelivery(appSettings);
 
-    // Vercel Hobby: cron can only run once/day — sweep due reminders when staff open the dashboard.
+    // Backup sweep when staff open the dashboard (primary schedule is Vercel Cron every 15 minutes).
     after(async () => {
       try {
         await processDueReminders();

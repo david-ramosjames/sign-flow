@@ -15,14 +15,14 @@ function isCronAuthorized(req: Request): boolean {
 }
 
 /**
- * Reminder sweep — Vercel Hobby allows one cron run per day (see vercel.json).
- * Due reminders are also processed when staff load the dashboard (see signing-requests GET).
+ * Reminder sweep — runs on Vercel Cron (every 15 minutes; see vercel.json).
+ * Due reminders are also processed when staff load the dashboard as a backup.
  */
 export async function GET(req: Request) {
   if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { due, processed, errors } = await processDueReminders();
-  return NextResponse.json({ ok: true, due, processed, errors });
+  const { due, processed, deferred, errors } = await processDueReminders();
+  return NextResponse.json({ ok: true, due, processed, deferred, errors });
 }

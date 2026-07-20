@@ -9,9 +9,8 @@ export const DEFAULT_REMINDER_SCHEDULE: ReminderScheduleSettings = {
 
 export function mergeReminderSchedule(settings: AppSettings | null): ReminderScheduleSettings {
   const o = settings?.reminderSchedule;
-  if (!o) return { ...DEFAULT_REMINDER_SCHEDULE };
-  return {
-    ...DEFAULT_REMINDER_SCHEDULE,
-    ...o,
-  };
+  const merged = !o ? { ...DEFAULT_REMINDER_SCHEDULE } : { ...DEFAULT_REMINDER_SCHEDULE, ...o };
+  // Keep the “next morning” hour inside the client send window (7 AM–8 PM US Central).
+  merged.secondReminderLocalHour = Math.min(20, Math.max(7, merged.secondReminderLocalHour));
+  return merged;
 }
