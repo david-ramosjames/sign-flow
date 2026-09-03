@@ -32,6 +32,14 @@ const communicationTemplatesPatchSchema = z
   })
   .optional();
 
+const reminderStepSchema = z.object({
+  day: z.number().int().min(0).max(30),
+  hour: z.number().int().min(7).max(20),
+  minutesAfterSend: z.number().int().min(5).max(10080).optional(),
+  smsTemplate: z.string().max(1000).default(""),
+  smsTemplateEs: z.string().max(1000).default(""),
+});
+
 const reminderSchedulePatchSchema = z
   .object({
     firstReminderAfterSendMinutes: z.number().int().min(5).max(10080).optional(),
@@ -39,6 +47,7 @@ const reminderSchedulePatchSchema = z
     thirdReminderHoursAfterSecond: z.number().int().min(1).max(168).optional(),
     followUpDaysAfterSend: z.array(z.number().int().min(1).max(30)).min(1).max(20).optional(),
     maxAutoReminders: z.number().int().min(1).max(20).optional(),
+    steps: z.array(reminderStepSchema).min(1).max(20).optional(),
   })
   .optional();
 

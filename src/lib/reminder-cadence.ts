@@ -38,23 +38,38 @@ export function clampToReminderSendWindow(date: Date): Date {
 }
 
 /**
- * Automated reminder schedule after initial send.
+ * Automated reminder schedule after initial send using `steps`.
  *
- * - Step 0 (`reminderCount === 0`): `firstReminderAfterSendMinutes` after send (day 0, 2nd text).
- * - Steps 1…n: calendar day `followUpDaysAfterSend[i]` after the send day, at `secondReminderLocalHour`
- *   US Central (defaults: days 1, 2, 3, 5, 7).
+ * Each step maps directly to `reminderCount`:
+ * - step[0] (day 0): `minutesAfterSend` minutes after `sentAt`.
+ * - step[n] (day ≥ 1): calendar day `step.day` after the send, at `step.hour` US Central.
  *
- * All steps are clamped to 7 AM–8 PM US Central.
+ * Falls back to `followUpDaysAfterSend` when steps are absent.
+ * All times clamped to 7 AM–8 PM US Central.
  */
 export function computeNextReminderAt(
   input: { sentAt: Date; reminderCount: number },
   schedule: ReminderScheduleSettings = DEFAULT_REMINDER_SCHEDULE,
 ): Date | null {
-  const max = schedule.maxAutoReminders;
-  if (input.reminderCount >= max) return null;
+  if (input.reminderCount >= schedule.maxAutoReminders) return null;
 
+  const steps = schedule.steps;
+
+  // New step-based path.
+  if (steps && steps.length > 0) {
+    if (input.reminderCount >= steps.length) return null;
+    const step = steps[input.reminderCount];
+    let raw: Date;
+    if (step.day === 0 && step.minutesAfterSend) {
+      raw = addMinutes(input.sentAt, step.minutesAfterSend);
+    } else {
+      raw = signflowLocalAtDaysAfter(input.sentAt, step.day, step.hour, 0);
+    }
+    return clampToReminderSendWindow(raw);
+  }
+
+  // Legacy fallback using followUpDaysAfterSend.
   const days = schedule.followUpDaysAfterSend ?? [];
-  // Total automated steps = day-0 short delay + one per follow-up day.
   const sequenceLen = 1 + days.length;
   if (input.reminderCount >= sequenceLen) return null;
 

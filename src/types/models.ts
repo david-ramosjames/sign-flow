@@ -219,11 +219,28 @@ export type OutboundDeliverySettings = {
   signingEmailEnabled: boolean;
 };
 
+/**
+ * One step in the automated follow-up sequence.
+ * Step 0 is the day-0 nudge (uses `minutesAfterSend`); steps 1+ use `day` + `hour`.
+ */
+export type ReminderStep = {
+  /** Calendar day offset from the send date. 0 = same day (uses `minutesAfterSend` instead of `hour`). */
+  day: number;
+  /** US Central hour (7–20) to send on for day ≥ 1 steps. Ignored for day 0. */
+  hour: number;
+  /** Minutes after send (day-0 step only). Ignored for day ≥ 1. */
+  minutesAfterSend?: number;
+  /** SMS template for this step (English). Supports {{clientName}}, {{url}}, {{firm}}. Empty = use default reminder template. */
+  smsTemplate: string;
+  /** SMS template for this step (Spanish). Empty = use English. */
+  smsTemplateEs: string;
+};
+
 /** Drives `computeNextReminderAt` when present on `AppSettings`. */
 export type ReminderScheduleSettings = {
   /** Day-0 follow-up: minutes after the initial send (second text the same day). */
   firstReminderAfterSendMinutes: number;
-  /** Local hour US Central (7–20) for calendar-day follow-ups. */
+  /** Local hour US Central (7–20) for calendar-day follow-ups (default for steps without explicit hour). */
   secondReminderLocalHour: number;
   /**
    * Calendar days after the send day for reminders after the day-0 short delay.
@@ -236,6 +253,8 @@ export type ReminderScheduleSettings = {
   thirdReminderHoursAfterSecond?: number;
   /** Cap on automated reminders after the initial send (includes the day-0 short delay). */
   maxAutoReminders: number;
+  /** Per-step sequence with individual templates and send times. Overrides followUpDaysAfterSend when present. */
+  steps?: ReminderStep[];
 };
 
 export type AppSettings = {

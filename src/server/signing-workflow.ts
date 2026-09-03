@@ -801,7 +801,7 @@ export async function runReminderForRequest(
     try {
       await sendSms(
         req.phone,
-        reminderSmsFromSettings(appSettings, req.clientName, req.signingUrl, req.language),
+        reminderSmsFromSettings(appSettings, req.clientName, req.signingUrl, req.language, req.reminderCount),
         quo,
       );
       smsSent = true;

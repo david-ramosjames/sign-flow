@@ -138,8 +138,20 @@ export function reminderSmsFromSettings(
   clientName: string,
   url: string,
   language: SupportedLanguage = "en",
+  /** Index into `reminderSchedule.steps` for per-step template override. */
+  reminderIndex?: number,
 ): string {
   const t = mergeCommunicationTemplates(settings);
+  // Check for per-step template override.
+  if (reminderIndex != null && settings?.reminderSchedule?.steps) {
+    const step = settings.reminderSchedule.steps[reminderIndex];
+    if (step) {
+      const stepTpl = templateForLanguage(language, step.smsTemplate, step.smsTemplateEs);
+      if (stepTpl.trim()) {
+        return applyTemplateString(stepTpl, { clientName, url, firm: t.firmName });
+      }
+    }
+  }
   const template = templateForLanguage(language, t.reminderSmsTemplate, t.reminderSmsTemplateEs);
   return applyTemplateString(template, { clientName, url, firm: t.firmName });
 }
