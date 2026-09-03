@@ -253,8 +253,10 @@ export type ReminderScheduleSettings = {
   thirdReminderHoursAfterSecond?: number;
   /** Cap on automated reminders after the initial send (includes the day-0 short delay). */
   maxAutoReminders: number;
-  /** Per-step sequence with individual templates and send times. Overrides followUpDaysAfterSend when present. */
+  /** General sequence (HIPAA, SAR, disbursement, and any non-contract). */
   steps?: ReminderStep[];
+  /** Contract-only sequence. Falls back to `steps` until saved separately. */
+  contractSteps?: ReminderStep[];
 };
 
 export type AppSettings = {

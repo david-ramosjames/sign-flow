@@ -48,6 +48,7 @@ const reminderSchedulePatchSchema = z
     followUpDaysAfterSend: z.array(z.number().int().min(1).max(30)).max(20).optional(),
     maxAutoReminders: z.number().int().min(1).max(20).optional(),
     steps: z.array(reminderStepSchema).min(1).max(20).optional(),
+    contractSteps: z.array(reminderStepSchema).min(1).max(20).optional(),
   })
   .optional();
 

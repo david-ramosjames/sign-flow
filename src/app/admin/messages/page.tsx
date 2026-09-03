@@ -37,9 +37,120 @@ function mergeOutbound(base: AppSettings | null): OutboundDeliverySettings {
   return { ...DEFAULT_OUTBOUND_DELIVERY, ...(base?.outboundDelivery ?? {}) };
 }
 
-function stepLabel(step: ReminderStep, idx: number): string {
+function stepLabel(step: ReminderStep): string {
   if (step.day === 0) return `Day 0 — ${step.minutesAfterSend ?? 30}min after send`;
-  return `Day ${step.day} — ${step.hour > 12 ? step.hour - 12 : step.hour}${step.hour >= 12 ? "PM" : "AM"} CT`;
+  const hour12 = step.hour > 12 ? step.hour - 12 : step.hour === 0 ? 12 : step.hour;
+  return `Day ${step.day} — ${hour12}${step.hour >= 12 ? "PM" : "AM"} CT`;
+}
+
+function SequenceEditor({
+  title,
+  description,
+  steps,
+  defaultHour,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  steps: ReminderStep[];
+  defaultHour: number;
+  onChange: (next: ReminderStep[]) => void;
+}) {
+  function updateStep(idx: number, patch: Partial<ReminderStep>) {
+    const next = [...steps];
+    next[idx] = { ...next[idx], ...patch };
+    onChange(next);
+  }
+  function addStep() {
+    const lastDay = steps.length > 0 ? Math.max(...steps.map((s) => s.day)) : 0;
+    onChange([...steps, { day: lastDay + 2, hour: defaultHour, smsTemplate: "", smsTemplateEs: "" }]);
+  }
+  function removeStep(idx: number) {
+    if (steps.length <= 1) return;
+    onChange(steps.filter((_, i) => i !== idx));
+  }
+
+  return (
+    <section className="m-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-sm">
+      <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+      <p className="mt-1 text-xs text-slate-600">{description}</p>
+      <div className="mt-4 space-y-4">
+        {steps.map((step, idx) => (
+          <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-sm font-medium text-slate-900">
+                Step {idx + 1}: {stepLabel(step)}
+              </div>
+              {steps.length > 1 ? (
+                <button type="button" className="text-xs text-rose-600 hover:text-rose-800" onClick={() => removeStep(idx)}>
+                  Remove
+                </button>
+              ) : null}
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <label className="block text-xs font-medium text-slate-600">
+                Day
+                <input
+                  type="number"
+                  min={0}
+                  max={30}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                  value={step.day}
+                  onChange={(e) => updateStep(idx, { day: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
+                />
+              </label>
+              {step.day === 0 ? (
+                <label className="block text-xs font-medium text-slate-600">
+                  Minutes after send
+                  <input
+                    type="number"
+                    min={5}
+                    max={1440}
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                    value={step.minutesAfterSend ?? 30}
+                    onChange={(e) => updateStep(idx, { minutesAfterSend: Math.max(5, Number(e.target.value) || 30) })}
+                  />
+                </label>
+              ) : (
+                <label className="block text-xs font-medium text-slate-600">
+                  Hour (7–20 CT)
+                  <input
+                    type="number"
+                    min={7}
+                    max={20}
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+                    value={step.hour}
+                    onChange={(e) => updateStep(idx, { hour: Math.min(20, Math.max(7, Number(e.target.value) || 9)) })}
+                  />
+                </label>
+              )}
+            </div>
+            <label className="mt-3 block text-xs font-medium text-slate-600">Custom SMS (English) — blank = default reminder</label>
+            <textarea
+              className="mt-1 min-h-[60px] w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              placeholder="Leave blank to use the default reminder SMS"
+              value={step.smsTemplate}
+              onChange={(e) => updateStep(idx, { smsTemplate: e.target.value })}
+            />
+            <label className="mt-2 block text-xs font-medium text-slate-600">Custom SMS (Spanish) — blank = English or default</label>
+            <textarea
+              className="mt-1 min-h-[60px] w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
+              placeholder="Leave blank to use English custom or default"
+              value={step.smsTemplateEs}
+              onChange={(e) => updateStep(idx, { smsTemplateEs: e.target.value })}
+            />
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+        onClick={addStep}
+      >
+        + Add follow-up step
+      </button>
+    </section>
+  );
 }
 
 export default function AdminMessagesPage() {
@@ -52,6 +163,7 @@ export default function AdminMessagesPage() {
   const [error, setError] = useState<string | null>(null);
   const [previewEmailAssetBase, setPreviewEmailAssetBase] = useState<string | null>(null);
   const [previewLanguage, setPreviewLanguage] = useState<SupportedLanguage>("en");
+  const [sequenceTab, setSequenceTab] = useState<"contract" | "general">("contract");
 
   const load = useCallback(async () => {
     const res = await fetch("/api/app-settings", { credentials: "include" });
@@ -121,26 +233,11 @@ export default function AdminMessagesPage() {
     return { subject, text };
   }, [completion.teamCompletedEmailBodyTemplate, completion.teamCompletedEmailSubjectTemplate, previewVars]);
 
-  const steps = rem.steps ?? buildDefaultSteps(rem.firstReminderAfterSendMinutes, rem.secondReminderLocalHour);
-
-  function updateStep(idx: number, patch: Partial<ReminderStep>) {
-    const next = [...steps];
-    next[idx] = { ...next[idx], ...patch };
-    setRem((r) => ({ ...r, steps: next, maxAutoReminders: next.length }));
-  }
-
-  function addStep() {
-    const lastDay = steps.length > 0 ? Math.max(...steps.map((s) => s.day)) : 0;
-    const newDay = lastDay + 2;
-    const next = [...steps, { day: newDay, hour: rem.secondReminderLocalHour, smsTemplate: "", smsTemplateEs: "" }];
-    setRem((r) => ({ ...r, steps: next, maxAutoReminders: next.length }));
-  }
-
-  function removeStep(idx: number) {
-    if (steps.length <= 1) return;
-    const next = steps.filter((_, i) => i !== idx);
-    setRem((r) => ({ ...r, steps: next, maxAutoReminders: next.length }));
-  }
+  const generalSteps = rem.steps ?? buildDefaultSteps(rem.firstReminderAfterSendMinutes, rem.secondReminderLocalHour);
+  const contractSteps = rem.contractSteps?.length
+    ? rem.contractSteps
+    : generalSteps.map((s) => ({ ...s }));
+  const previewSequenceSteps = sequenceTab === "contract" ? contractSteps : generalSteps;
 
   async function save() {
     setSaving(true);
@@ -155,8 +252,11 @@ export default function AdminMessagesPage() {
         outboundDelivery: outbound,
         reminderSchedule: {
           ...rem,
-          followUpDaysAfterSend: steps.filter((s) => s.day > 0).map((s) => s.day),
-          firstReminderAfterSendMinutes: steps.find((s) => s.day === 0)?.minutesAfterSend ?? 30,
+          steps: generalSteps,
+          contractSteps,
+          followUpDaysAfterSend: generalSteps.filter((s) => s.day > 0).map((s) => s.day),
+          firstReminderAfterSendMinutes: generalSteps.find((s) => s.day === 0)?.minutesAfterSend ?? 30,
+          maxAutoReminders: Math.max(generalSteps.length, contractSteps.length),
         },
       }),
     });
@@ -245,102 +345,39 @@ export default function AdminMessagesPage() {
               <textarea className="mt-3 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.reminderSmsTemplateEs} onChange={(e) => setComm((c) => ({ ...c, reminderSmsTemplateEs: e.target.value }))} />
             </section>
 
-            {/* Follow-up sequence */}
-            <section className="m-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">Follow-up sequence</h3>
-              <p className="mt-1 text-xs text-slate-600">
-                Each row is one automated follow-up after the initial send. Set the day, time, and optionally a custom SMS
-                for that step. Leave the SMS blank to use the default reminder template above.
-              </p>
-
-              <div className="mt-4 space-y-4">
-                {steps.map((step, idx) => (
-                  <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="text-sm font-medium text-slate-900">
-                        Step {idx + 1}: {stepLabel(step, idx)}
-                      </div>
-                      {steps.length > 1 ? (
-                        <button
-                          type="button"
-                          className="text-xs text-rose-600 hover:text-rose-800"
-                          onClick={() => removeStep(idx)}
-                        >
-                          Remove
-                        </button>
-                      ) : null}
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                      <label className="block text-xs font-medium text-slate-600">
-                        Day
-                        <input
-                          type="number"
-                          min={0}
-                          max={30}
-                          className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                          value={step.day}
-                          onChange={(e) => updateStep(idx, { day: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
-                        />
-                      </label>
-                      {step.day === 0 ? (
-                        <label className="block text-xs font-medium text-slate-600">
-                          Minutes after send
-                          <input
-                            type="number"
-                            min={5}
-                            max={1440}
-                            className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                            value={step.minutesAfterSend ?? 30}
-                            onChange={(e) => updateStep(idx, { minutesAfterSend: Math.max(5, Number(e.target.value) || 30) })}
-                          />
-                        </label>
-                      ) : (
-                        <label className="block text-xs font-medium text-slate-600">
-                          Hour (7–20 CT)
-                          <input
-                            type="number"
-                            min={7}
-                            max={20}
-                            className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                            value={step.hour}
-                            onChange={(e) => {
-                              const h = Math.min(20, Math.max(7, Number(e.target.value) || 9));
-                              updateStep(idx, { hour: h });
-                            }}
-                          />
-                        </label>
-                      )}
-                    </div>
-                    <label className="mt-3 block text-xs font-medium text-slate-600">
-                      Custom SMS (English) — blank = default reminder
-                    </label>
-                    <textarea
-                      className="mt-1 min-h-[60px] w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                      placeholder="Leave blank to use the default reminder SMS"
-                      value={step.smsTemplate}
-                      onChange={(e) => updateStep(idx, { smsTemplate: e.target.value })}
-                    />
-                    <label className="mt-2 block text-xs font-medium text-slate-600">
-                      Custom SMS (Spanish) — blank = English or default
-                    </label>
-                    <textarea
-                      className="mt-1 min-h-[60px] w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-                      placeholder="Leave blank to use English custom or default"
-                      value={step.smsTemplateEs}
-                      onChange={(e) => updateStep(idx, { smsTemplateEs: e.target.value })}
-                    />
-                  </div>
-                ))}
-              </div>
-
+            <div className="m-3 flex gap-2">
               <button
                 type="button"
-                className="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                onClick={addStep}
+                className={`rounded-xl px-3 py-1.5 text-sm font-medium ${sequenceTab === "contract" ? "bg-[color:var(--brand-navy)] text-white" : "bg-white text-slate-700 ring-1 ring-slate-200"}`}
+                onClick={() => setSequenceTab("contract")}
               >
-                + Add follow-up step
+                Contract sequence
               </button>
-            </section>
+              <button
+                type="button"
+                className={`rounded-xl px-3 py-1.5 text-sm font-medium ${sequenceTab === "general" ? "bg-[color:var(--brand-navy)] text-white" : "bg-white text-slate-700 ring-1 ring-slate-200"}`}
+                onClick={() => setSequenceTab("general")}
+              >
+                General sequence
+              </button>
+            </div>
+            {sequenceTab === "contract" ? (
+              <SequenceEditor
+                title="Contract follow-ups"
+                description="Used when sending a contract. Each row is one automated follow-up after the initial send."
+                steps={contractSteps}
+                defaultHour={rem.secondReminderLocalHour}
+                onChange={(next) => setRem((r) => ({ ...r, contractSteps: next }))}
+              />
+            ) : (
+              <SequenceEditor
+                title="General follow-ups"
+                description="Used for HIPAA, SAR, Disbursement, and other non-contract sends."
+                steps={generalSteps}
+                defaultHour={rem.secondReminderLocalHour}
+                onChange={(next) => setRem((r) => ({ ...r, steps: next }))}
+              />
+            )}
 
             {/* Thank-you SMS */}
             <section className="m-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-sm">
@@ -445,10 +482,12 @@ export default function AdminMessagesPage() {
                 <div className="text-xs font-semibold uppercase tracking-wide text-blue-600">Default reminder SMS</div>
                 <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs text-slate-800 ring-1 ring-slate-200">{previewReminderSms}</pre>
               </div>
-              {steps.map((step, idx) =>
+              {previewSequenceSteps.map((step, idx) =>
                 step.smsTemplate.trim() ? (
-                  <div key={idx}>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-blue-600">Step {idx + 1} custom SMS</div>
+                  <div key={`${sequenceTab}-${idx}`}>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                      {sequenceTab === "contract" ? "Contract" : "General"} step {idx + 1} custom SMS
+                    </div>
                     <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs text-slate-800 ring-1 ring-slate-200">
                       {applyTemplateString(templateForLanguage(previewLanguage, step.smsTemplate, step.smsTemplateEs), previewVars)}
                     </pre>

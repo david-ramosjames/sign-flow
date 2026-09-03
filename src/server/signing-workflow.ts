@@ -1,5 +1,5 @@
 import { clampToReminderSendWindow, computeNextReminderAt, isWithinReminderSendWindow } from "@/lib/reminder-cadence";
-import { mergeReminderSchedule } from "@/lib/reminder-schedule";
+import { reminderScheduleForFormKind } from "@/lib/reminder-schedule";
 import {
   mergeCompletionNotifications,
   parseEmailList,
@@ -83,13 +83,13 @@ export async function createLeadAndSigningRequest(
   const store = getSignFlowStore();
   const firmId = input.firmId?.trim() || DEFAULT_FIRM_ID;
   const { appSettings, docuseal, quo } = await firmRuntime(firmId);
-  const reminderSchedule = mergeReminderSchedule(appSettings);
   const now = nowIso();
   const leadId = newId("lead");
   const reqId = newId("sig");
 
   const template = await getTemplate(input.templateId, docuseal);
   const formKind = detectSigningFormKind(template.name);
+  const reminderSchedule = reminderScheduleForFormKind(appSettings, formKind);
 
   if (templateRequiresDateOfLoss(template.name) && !input.dateOfLoss?.trim()) {
     throw new Error("Date of loss is required for this contract template.");
@@ -760,7 +760,7 @@ export async function runReminderForRequest(
   const store = getSignFlowStore();
   const { appSettings, quo } = await firmRuntime(documentFirmId(req));
   const outbound = mergeOutboundDelivery(appSettings);
-  const reminderSchedule = mergeReminderSchedule(appSettings);
+  const reminderSchedule = reminderScheduleForFormKind(appSettings, req.formKind);
   if (req.reminderCount >= reminderSchedule.maxAutoReminders) {
     req.manualFollowUp = true;
     req.nextReminderAt = null;
@@ -801,7 +801,14 @@ export async function runReminderForRequest(
     try {
       await sendSms(
         req.phone,
-        reminderSmsFromSettings(appSettings, req.clientName, req.signingUrl, req.language, req.reminderCount),
+        reminderSmsFromSettings(
+          appSettings,
+          req.clientName,
+          req.signingUrl,
+          req.language,
+          req.reminderCount,
+          reminderSchedule,
+        ),
         quo,
       );
       smsSent = true;

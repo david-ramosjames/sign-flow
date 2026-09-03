@@ -138,13 +138,15 @@ export function reminderSmsFromSettings(
   clientName: string,
   url: string,
   language: SupportedLanguage = "en",
-  /** Index into `reminderSchedule.steps` for per-step template override. */
+  /** Index into the active sequence’s `steps` for per-step template override. */
   reminderIndex?: number,
+  /** Resolved schedule for this request’s form kind (contract vs general). */
+  schedule?: { steps?: { smsTemplate: string; smsTemplateEs: string }[] },
 ): string {
   const t = mergeCommunicationTemplates(settings);
-  // Check for per-step template override.
-  if (reminderIndex != null && settings?.reminderSchedule?.steps) {
-    const step = settings.reminderSchedule.steps[reminderIndex];
+  const steps = schedule?.steps ?? settings?.reminderSchedule?.steps;
+  if (reminderIndex != null && steps) {
+    const step = steps[reminderIndex];
     if (step) {
       const stepTpl = templateForLanguage(language, step.smsTemplate, step.smsTemplateEs);
       if (stepTpl.trim()) {

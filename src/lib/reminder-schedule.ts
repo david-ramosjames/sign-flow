@@ -1,4 +1,4 @@
-import type { AppSettings, ReminderScheduleSettings, ReminderStep } from "@/types/models";
+import type { AppSettings, ReminderScheduleSettings, ReminderStep, SigningFormKind } from "@/types/models";
 
 /** Default sequence: day 0 (+30m), then days 1, 2, 3, 5, 7 at the morning hour. */
 export const DEFAULT_FOLLOW_UP_DAYS_AFTER_SEND = [1, 2, 3, 5, 7] as const;
@@ -24,6 +24,7 @@ export const DEFAULT_REMINDER_SCHEDULE: ReminderScheduleSettings = {
   thirdReminderHoursAfterSecond: 24,
   maxAutoReminders: 1 + DEFAULT_FOLLOW_UP_DAYS_AFTER_SEND.length,
   steps: buildDefaultSteps(),
+  contractSteps: buildDefaultSteps(),
 };
 
 function sanitizeFollowUpDays(raw: unknown): number[] {
@@ -36,7 +37,7 @@ function sanitizeFollowUpDays(raw: unknown): number[] {
   return unique.length > 0 ? unique : [...DEFAULT_FOLLOW_UP_DAYS_AFTER_SEND];
 }
 
-function sanitizeSteps(raw: unknown, fallbackHour: number): ReminderStep[] {
+export function sanitizeSteps(raw: unknown, fallbackHour: number): ReminderStep[] {
   if (!Array.isArray(raw) || raw.length === 0) return [];
   return raw
     .filter((s): s is Record<string, unknown> => s && typeof s === "object")
@@ -55,16 +56,20 @@ function sanitizeSteps(raw: unknown, fallbackHour: number): ReminderStep[] {
     .sort((a, b) => a.day - b.day || (a.minutesAfterSend ?? 0) - (b.minutesAfterSend ?? 0));
 }
 
-/** Derive steps from followUpDaysAfterSend + firstReminderAfterSendMinutes when steps are absent. */
 function stepsFromLegacy(schedule: ReminderScheduleSettings): ReminderStep[] {
   const days = schedule.followUpDaysAfterSend ?? [...DEFAULT_FOLLOW_UP_DAYS_AFTER_SEND];
   return buildDefaultSteps(schedule.firstReminderAfterSendMinutes, schedule.secondReminderLocalHour, days);
+}
+
+function cloneSteps(steps: ReminderStep[]): ReminderStep[] {
+  return steps.map((s) => ({ ...s }));
 }
 
 export function mergeReminderSchedule(settings: AppSettings | null): ReminderScheduleSettings {
   const o = settings?.reminderSchedule;
   const hasExplicitSteps = Array.isArray(o?.steps) && o.steps.length > 0;
   const hasExplicitDays = Array.isArray(o?.followUpDaysAfterSend) && o.followUpDaysAfterSend.length > 0;
+  const hasExplicitContractSteps = Array.isArray(o?.contractSteps) && o.contractSteps.length > 0;
 
   const merged: ReminderScheduleSettings = {
     ...DEFAULT_REMINDER_SCHEDULE,
@@ -78,24 +83,49 @@ export function mergeReminderSchedule(settings: AppSettings | null): ReminderSch
 
   if (hasExplicitSteps) {
     merged.steps = sanitizeSteps(o!.steps, merged.secondReminderLocalHour);
-    // Derive followUpDaysAfterSend from steps for cadence compatibility.
     merged.followUpDaysAfterSend = merged.steps.filter((s) => s.day > 0).map((s) => s.day);
     merged.firstReminderAfterSendMinutes = merged.steps.find((s) => s.day === 0)?.minutesAfterSend ?? 30;
   } else {
     merged.steps = stepsFromLegacy(merged);
   }
 
-  // Legacy docs only had maxAutoReminders: 3 — raise to cover the new day sequence.
-  if (!hasExplicitDays && !hasExplicitSteps && (o?.maxAutoReminders == null || o.maxAutoReminders <= 3)) {
-    merged.maxAutoReminders = merged.steps.length;
-  } else {
-    merged.maxAutoReminders = Math.min(20, Math.max(1, Math.floor(merged.maxAutoReminders) || 6));
-  }
+  merged.contractSteps = hasExplicitContractSteps
+    ? sanitizeSteps(o!.contractSteps, merged.secondReminderLocalHour)
+    : cloneSteps(merged.steps);
 
-  const sequenceLen = merged.steps.length;
-  if (merged.maxAutoReminders > sequenceLen) {
-    merged.maxAutoReminders = sequenceLen;
+  const longest = Math.max(merged.steps.length, merged.contractSteps.length);
+  if (!hasExplicitDays && !hasExplicitSteps && (o?.maxAutoReminders == null || o.maxAutoReminders <= 3)) {
+    merged.maxAutoReminders = longest;
+  } else {
+    merged.maxAutoReminders = Math.min(20, Math.max(1, Math.floor(merged.maxAutoReminders) || longest));
   }
 
   return merged;
+}
+
+/** Apply one sequence’s steps onto a copy of the merged schedule for cadence + SMS lookup. */
+export function scheduleWithSteps(
+  schedule: ReminderScheduleSettings,
+  steps: ReminderStep[],
+): ReminderScheduleSettings {
+  const list = steps.length > 0 ? steps : schedule.steps ?? [];
+  return {
+    ...schedule,
+    steps: list,
+    firstReminderAfterSendMinutes: list.find((s) => s.day === 0)?.minutesAfterSend ?? schedule.firstReminderAfterSendMinutes,
+    followUpDaysAfterSend: list.filter((s) => s.day > 0).map((s) => s.day),
+    maxAutoReminders: list.length,
+  };
+}
+
+export function reminderScheduleForFormKind(
+  settings: AppSettings | null,
+  formKind: SigningFormKind | null | undefined,
+): ReminderScheduleSettings {
+  const merged = mergeReminderSchedule(settings);
+  const steps =
+    formKind === "contract"
+      ? (merged.contractSteps?.length ? merged.contractSteps : merged.steps ?? [])
+      : (merged.steps ?? []);
+  return scheduleWithSteps(merged, steps);
 }
