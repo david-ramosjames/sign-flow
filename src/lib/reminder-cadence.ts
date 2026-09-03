@@ -1,8 +1,8 @@
-import { addHours, addMinutes } from "date-fns";
+import { addMinutes } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import type { ReminderScheduleSettings } from "@/types/models";
 import { DEFAULT_REMINDER_SCHEDULE } from "@/lib/reminder-schedule";
-import { nextSignflowMorningAfter, SIGNFLOW_TIMEZONE } from "@/lib/signflow-timezone";
+import { signflowLocalAtDaysAfter, SIGNFLOW_TIMEZONE } from "@/lib/signflow-timezone";
 
 /** US Central: no client reminders before this hour (inclusive). */
 export const REMINDER_SEND_EARLIEST_HOUR = 7;
@@ -39,9 +39,11 @@ export function clampToReminderSendWindow(date: Date): Date {
 
 /**
  * Automated reminder schedule after initial send.
- * Step 1: `firstReminderAfterSendMinutes` after send.
- * Step 2: next calendar day at `secondReminderLocalHour` US Central after step-1 anchor time.
- * Step 3: `thirdReminderHoursAfterSecond` hours after that second anchor.
+ *
+ * - Step 0 (`reminderCount === 0`): `firstReminderAfterSendMinutes` after send (day 0, 2nd text).
+ * - Steps 1…n: calendar day `followUpDaysAfterSend[i]` after the send day, at `secondReminderLocalHour`
+ *   US Central (defaults: days 1, 2, 3, 5, 7).
+ *
  * All steps are clamped to 7 AM–8 PM US Central.
  */
 export function computeNextReminderAt(
@@ -50,22 +52,19 @@ export function computeNextReminderAt(
 ): Date | null {
   const max = schedule.maxAutoReminders;
   if (input.reminderCount >= max) return null;
-  const sent = input.sentAt;
+
+  const days = schedule.followUpDaysAfterSend ?? [];
+  // Total automated steps = day-0 short delay + one per follow-up day.
+  const sequenceLen = 1 + days.length;
+  if (input.reminderCount >= sequenceLen) return null;
+
   let raw: Date;
   if (input.reminderCount === 0) {
-    raw = addMinutes(sent, schedule.firstReminderAfterSendMinutes);
+    raw = addMinutes(input.sentAt, schedule.firstReminderAfterSendMinutes);
   } else {
-    const first = addMinutes(sent, schedule.firstReminderAfterSendMinutes);
-    if (input.reminderCount === 1) {
-      raw = nextSignflowMorningAfter(first, schedule.secondReminderLocalHour, 0);
-    } else {
-      const morning = nextSignflowMorningAfter(first, schedule.secondReminderLocalHour, 0);
-      if (input.reminderCount === 2) {
-        raw = addHours(morning, schedule.thirdReminderHoursAfterSecond);
-      } else {
-        return null;
-      }
-    }
+    const dayOffset = days[input.reminderCount - 1];
+    if (dayOffset == null) return null;
+    raw = signflowLocalAtDaysAfter(input.sentAt, dayOffset, schedule.secondReminderLocalHour, 0);
   }
   return clampToReminderSendWindow(raw);
 }

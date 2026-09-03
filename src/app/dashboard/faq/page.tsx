@@ -171,7 +171,8 @@ const SECTIONS: FaqSection[] = [
     items: [
       {
         question: "Does Sign Flow send reminders?",
-        answer: "Yes, reminder activity is visible on each request. Reminders only go out between 7:00 AM and 8:00 PM US Central.",
+        answer:
+          "Yes. After the initial send there is a same-day follow-up, then texts on days 1, 2, 3, 5, and 7 (editable under Admin → Messages & reminders). Reminders only go out between 7:00 AM and 8:00 PM US Central.",
       },
       {
         question: "What happens if a client texts STOP?",

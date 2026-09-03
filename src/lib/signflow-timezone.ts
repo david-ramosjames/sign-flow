@@ -73,11 +73,16 @@ export function formatSignflowMonthSpanish(calendar: SignflowCalendarDate): stri
 
 /** Next calendar day in US Central at the given local hour (reminder “next morning”). */
 export function nextSignflowMorningAfter(from: Date, hour: number, minute = 0): Date {
+  return signflowLocalAtDaysAfter(from, 1, hour, minute);
+}
+
+/** US Central local time on the calendar day `days` after `from`’s calendar day. */
+export function signflowLocalAtDaysAfter(from: Date, days: number, hour: number, minute = 0): Date {
   const zoned = toZonedTime(from, SIGNFLOW_TIMEZONE);
-  const next = new Date(zoned);
-  next.setDate(next.getDate() + 1);
-  next.setHours(hour, minute, 0, 0);
-  return fromZonedTime(next, SIGNFLOW_TIMEZONE);
+  const target = new Date(zoned);
+  target.setDate(target.getDate() + days);
+  target.setHours(hour, minute, 0, 0);
+  return fromZonedTime(target, SIGNFLOW_TIMEZONE);
 }
 
 export function formatSignflowDateTime(input: Date | string | number): string {

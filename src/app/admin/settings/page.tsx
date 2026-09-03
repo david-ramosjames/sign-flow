@@ -82,11 +82,11 @@ export default function AdminSettingsPage() {
         <div className="text-sm font-semibold text-slate-900">Reminder cron</div>
         <p className="mt-2 text-sm text-slate-700">
           Vercel Cron calls <code className="rounded bg-slate-100 px-1 text-xs">/api/cron/reminders</code> every 15
-          minutes and sends any due reminders (first reminder defaults to 30 minutes after send). Client reminders only
-          go out between <strong>7:00 AM and 8:00 PM US Central</strong>; overnight due items wait until 7:00 AM.
-          Opening the <strong>Signing requests</strong> dashboard also triggers a backup sweep. To run the endpoint
-          manually, GET that URL with header <code className="text-xs">x-cron-secret</code> if{" "}
-          <code>CRON_SECRET</code> is set.
+          minutes and sends any due reminders (same-day nudge defaults to 30 minutes after send, then follow-ups on days
+          1, 2, 3, 5, and 7). Client reminders only go out between <strong>7:00 AM and 8:00 PM US Central</strong>;
+          overnight due items wait until 7:00 AM. Opening the <strong>Signing requests</strong> dashboard also triggers
+          a backup sweep. To run the endpoint manually, GET that URL with header{" "}
+          <code className="text-xs">x-cron-secret</code> if <code>CRON_SECRET</code> is set.
         </p>
       </div>
 

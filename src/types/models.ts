@@ -221,10 +221,20 @@ export type OutboundDeliverySettings = {
 
 /** Drives `computeNextReminderAt` when present on `AppSettings`. */
 export type ReminderScheduleSettings = {
+  /** Day-0 follow-up: minutes after the initial send (second text the same day). */
   firstReminderAfterSendMinutes: number;
-  /** Second reminder lands on the calendar day after (first send + first offset), at this hour US Central (7–20). */
+  /** Local hour US Central (7–20) for calendar-day follow-ups. */
   secondReminderLocalHour: number;
-  thirdReminderHoursAfterSecond: number;
+  /**
+   * Calendar days after the send day for reminders after the day-0 short delay.
+   * Example `[1, 2, 3, 5, 7]` → texts on day 1, 2, 3, 5, and 7 at `secondReminderLocalHour`.
+   */
+  followUpDaysAfterSend: number[];
+  /**
+   * @deprecated Ignored when `followUpDaysAfterSend` is set. Kept so older Firestore docs still merge cleanly.
+   */
+  thirdReminderHoursAfterSecond?: number;
+  /** Cap on automated reminders after the initial send (includes the day-0 short delay). */
   maxAutoReminders: number;
 };
 

@@ -6,7 +6,7 @@ import { nowIso } from "@/lib/time";
 import type { AppSettings } from "@/types/models";
 import { isGmailWorkspaceDelegationConfigured } from "@/services/gmail-workspace-dwd";
 import { DEFAULT_COMMUNICATION_TEMPLATES } from "@/lib/messaging";
-import { DEFAULT_REMINDER_SCHEDULE } from "@/lib/reminder-schedule";
+import { DEFAULT_REMINDER_SCHEDULE, mergeReminderSchedule } from "@/lib/reminder-schedule";
 import { DEFAULT_COMPLETION_NOTIFICATIONS } from "@/lib/completion-notifications";
 import { DEFAULT_OUTBOUND_DELIVERY, mergeOutboundDelivery } from "@/lib/outbound-delivery";
 import { getFirmDocusealConnection, getFirmQuoConnection } from "@/lib/firms";
@@ -37,7 +37,8 @@ const reminderSchedulePatchSchema = z
     firstReminderAfterSendMinutes: z.number().int().min(5).max(10080).optional(),
     secondReminderLocalHour: z.number().int().min(0).max(23).optional(),
     thirdReminderHoursAfterSecond: z.number().int().min(1).max(168).optional(),
-    maxAutoReminders: z.number().int().min(1).max(10).optional(),
+    followUpDaysAfterSend: z.array(z.number().int().min(1).max(30)).min(1).max(20).optional(),
+    maxAutoReminders: z.number().int().min(1).max(20).optional(),
   })
   .optional();
 
@@ -161,11 +162,14 @@ export async function PATCH(req: Request) {
     };
   }
   if (rsPatch !== undefined) {
-    updated.reminderSchedule = {
-      ...DEFAULT_REMINDER_SCHEDULE,
-      ...(existing.reminderSchedule ?? {}),
-      ...rsPatch,
-    };
+    updated.reminderSchedule = mergeReminderSchedule({
+      ...updated,
+      reminderSchedule: {
+        ...DEFAULT_REMINDER_SCHEDULE,
+        ...(existing.reminderSchedule ?? {}),
+        ...rsPatch,
+      },
+    });
   }
   if (cnPatch !== undefined) {
     updated.completionNotifications = {

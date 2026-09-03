@@ -14,7 +14,7 @@ import { templateForLanguage } from "@/lib/message-language";
 import { DEFAULT_COMPLETION_NOTIFICATIONS } from "@/lib/completion-notifications";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 import { buildBrandedEmailHtml, splitEmailBodyAroundUrl } from "@/lib/email-html-layout";
-import { DEFAULT_REMINDER_SCHEDULE } from "@/lib/reminder-schedule";
+import { DEFAULT_REMINDER_SCHEDULE, mergeReminderSchedule } from "@/lib/reminder-schedule";
 
 const PREVIEW = {
   clientName: "Jane Client",
@@ -32,7 +32,7 @@ function mergeCompletion(base: AppSettings | null): CompletionNotificationSettin
 }
 
 function mergeRem(base: AppSettings | null): ReminderScheduleSettings {
-  return { ...DEFAULT_REMINDER_SCHEDULE, ...(base?.reminderSchedule ?? {}) };
+  return mergeReminderSchedule(base);
 }
 
 function mergeOutbound(base: AppSettings | null): OutboundDeliverySettings {
@@ -475,9 +475,10 @@ export default function AdminMessagesPage() {
           <section className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--card)] p-6 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-900">Reminder schedule</h2>
             <p className="mt-1 text-xs text-slate-600">
-              After the initial send: first nudge, then next calendar morning at the hour below (after the first step), then
-              hours after that morning. Reminders only go out between <strong>7:00 AM and 8:00 PM US Central</strong> — if a
-              slot would fall outside that window, it is moved to the next morning at 7:00 AM.
+              After the initial send: a same-day nudge, then follow-ups on the calendar days listed below at the morning
+              hour (US Central). Default is day 0 (+minutes), then days <strong>1, 2, 3, 5, and 7</strong>. Reminders
+              only go out between <strong>7:00 AM and 8:00 PM US Central</strong> — if a slot would fall outside that
+              window, it is moved to the next morning at 7:00 AM.
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <label className="block text-xs font-medium text-slate-600">
@@ -492,7 +493,7 @@ export default function AdminMessagesPage() {
                 />
               </label>
               <label className="block text-xs font-medium text-slate-600">
-                Second reminder — local hour (7–20, US Central)
+                Follow-up hour (7–20, US Central)
                 <input
                   type="number"
                   min={7}
@@ -506,26 +507,40 @@ export default function AdminMessagesPage() {
                   }}
                 />
               </label>
-              <label className="block text-xs font-medium text-slate-600">
-                Third reminder (hours after second slot)
+              <label className="block text-xs font-medium text-slate-600 sm:col-span-2">
+                Follow-up days after send (comma-separated)
                 <input
-                  type="number"
-                  min={1}
-                  max={168}
+                  type="text"
                   className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                  value={rem.thirdReminderHoursAfterSecond}
-                  onChange={(e) => setRem((r) => ({ ...r, thirdReminderHoursAfterSecond: Number(e.target.value) || 24 }))}
+                  value={(rem.followUpDaysAfterSend ?? []).join(", ")}
+                  onChange={(e) => {
+                    const days = e.target.value
+                      .split(/[,\s]+/)
+                      .map((s) => Number(s.trim()))
+                      .filter((n) => Number.isFinite(n) && n >= 1 && n <= 30)
+                      .map((n) => Math.floor(n));
+                    const unique = [...new Set(days)].sort((a, b) => a - b);
+                    setRem((r) => ({
+                      ...r,
+                      followUpDaysAfterSend: unique,
+                      maxAutoReminders: Math.max(1, 1 + unique.length),
+                    }));
+                  }}
+                  placeholder="1, 2, 3, 5, 7"
                 />
+                <span className="mt-1 block font-normal text-slate-500">
+                  Sequence: day 0 (send + first reminder), then each listed day at the follow-up hour.
+                </span>
               </label>
               <label className="block text-xs font-medium text-slate-600">
                 Max auto reminders
                 <input
                   type="number"
                   min={1}
-                  max={10}
+                  max={20}
                   className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                   value={rem.maxAutoReminders}
-                  onChange={(e) => setRem((r) => ({ ...r, maxAutoReminders: Number(e.target.value) || 3 }))}
+                  onChange={(e) => setRem((r) => ({ ...r, maxAutoReminders: Number(e.target.value) || 6 }))}
                 />
               </label>
             </div>
