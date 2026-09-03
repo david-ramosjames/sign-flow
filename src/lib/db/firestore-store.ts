@@ -166,7 +166,9 @@ export class FirestoreSignFlowStore implements SignFlowStore {
 
   async upsertAppSettings(doc: AppSettings): Promise<void> {
     const id = !doc.id || doc.id === LEGACY_SETTINGS_ID ? DEFAULT_FIRM_ID : doc.id;
-    await col<AppSettings>(this.db, "appSettings").doc(id).set({ ...doc, id }, { merge: true });
+    // Firestore rejects `undefined` values — strip them via JSON round-trip.
+    const clean = JSON.parse(JSON.stringify({ ...doc, id }));
+    await col<AppSettings>(this.db, "appSettings").doc(id).set(clean, { merge: true });
   }
 }
 

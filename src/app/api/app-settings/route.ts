@@ -45,7 +45,7 @@ const reminderSchedulePatchSchema = z
     firstReminderAfterSendMinutes: z.number().int().min(5).max(10080).optional(),
     secondReminderLocalHour: z.number().int().min(0).max(23).optional(),
     thirdReminderHoursAfterSecond: z.number().int().min(1).max(168).optional(),
-    followUpDaysAfterSend: z.array(z.number().int().min(1).max(30)).min(1).max(20).optional(),
+    followUpDaysAfterSend: z.array(z.number().int().min(1).max(30)).max(20).optional(),
     maxAutoReminders: z.number().int().min(1).max(20).optional(),
     steps: z.array(reminderStepSchema).min(1).max(20).optional(),
   })
@@ -135,67 +135,73 @@ export async function PATCH(req: Request) {
   const parsed = patchSchema.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const store = getSignFlowStore();
-  const existing =
-    (await store.getAppSettings(firmId)) ??
-    ({
+  try {
+    const store = getSignFlowStore();
+    const existing =
+      (await store.getAppSettings(firmId)) ??
+      ({
+        id: firmId,
+        docusealConfigured: false,
+        smsConfigured: false,
+        dropboxConfigured: false,
+        slackWebhookConfigured: false,
+        emailConfigured: false,
+        updatedAt: nowIso(),
+      } satisfies AppSettings);
+
+    const {
+      communicationTemplates: ctPatch,
+      reminderSchedule: rsPatch,
+      completionNotifications: cnPatch,
+      outboundDelivery: odPatch,
+      ...flagPatches
+    } = parsed.data;
+
+    const updated: AppSettings = {
+      ...existing,
+      ...flagPatches,
       id: firmId,
-      docusealConfigured: false,
-      smsConfigured: false,
-      dropboxConfigured: false,
-      slackWebhookConfigured: false,
-      emailConfigured: false,
       updatedAt: nowIso(),
-    } satisfies AppSettings);
-
-  const {
-    communicationTemplates: ctPatch,
-    reminderSchedule: rsPatch,
-    completionNotifications: cnPatch,
-    outboundDelivery: odPatch,
-    ...flagPatches
-  } = parsed.data;
-
-  const updated: AppSettings = {
-    ...existing,
-    ...flagPatches,
-    id: firmId,
-    updatedAt: nowIso(),
-  };
-
-  if (ctPatch !== undefined) {
-    updated.communicationTemplates = {
-      ...DEFAULT_COMMUNICATION_TEMPLATES,
-      ...(existing.communicationTemplates ?? {}),
-      ...ctPatch,
     };
-  }
-  if (rsPatch !== undefined) {
-    updated.reminderSchedule = mergeReminderSchedule({
-      ...updated,
-      reminderSchedule: {
-        ...DEFAULT_REMINDER_SCHEDULE,
-        ...(existing.reminderSchedule ?? {}),
-        ...rsPatch,
-      },
+
+    if (ctPatch !== undefined) {
+      updated.communicationTemplates = {
+        ...DEFAULT_COMMUNICATION_TEMPLATES,
+        ...(existing.communicationTemplates ?? {}),
+        ...ctPatch,
+      };
+    }
+    if (rsPatch !== undefined) {
+      updated.reminderSchedule = mergeReminderSchedule({
+        ...updated,
+        reminderSchedule: {
+          ...DEFAULT_REMINDER_SCHEDULE,
+          ...(existing.reminderSchedule ?? {}),
+          ...rsPatch,
+        },
+      });
+    }
+    if (cnPatch !== undefined) {
+      updated.completionNotifications = {
+        ...DEFAULT_COMPLETION_NOTIFICATIONS,
+        ...(existing.completionNotifications ?? {}),
+        ...cnPatch,
+      };
+    }
+    if (odPatch !== undefined) {
+      updated.outboundDelivery = {
+        ...DEFAULT_OUTBOUND_DELIVERY,
+        ...(existing.outboundDelivery ?? {}),
+        ...odPatch,
+      };
+    }
+    await store.upsertAppSettings(updated);
+    return NextResponse.json({
+      item: { ...updated, outboundDelivery: mergeOutboundDelivery(updated) },
     });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Internal error";
+    console.error("[app-settings PATCH]", e);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
-  if (cnPatch !== undefined) {
-    updated.completionNotifications = {
-      ...DEFAULT_COMPLETION_NOTIFICATIONS,
-      ...(existing.completionNotifications ?? {}),
-      ...cnPatch,
-    };
-  }
-  if (odPatch !== undefined) {
-    updated.outboundDelivery = {
-      ...DEFAULT_OUTBOUND_DELIVERY,
-      ...(existing.outboundDelivery ?? {}),
-      ...odPatch,
-    };
-  }
-  await store.upsertAppSettings(updated);
-  return NextResponse.json({
-    item: { ...updated, outboundDelivery: mergeOutboundDelivery(updated) },
-  });
 }

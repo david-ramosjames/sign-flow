@@ -40,13 +40,18 @@ function sanitizeSteps(raw: unknown, fallbackHour: number): ReminderStep[] {
   if (!Array.isArray(raw) || raw.length === 0) return [];
   return raw
     .filter((s): s is Record<string, unknown> => s && typeof s === "object")
-    .map((s) => ({
-      day: Math.max(0, Math.floor(Number(s.day) || 0)),
-      hour: Math.min(20, Math.max(7, Math.floor(Number(s.hour) || fallbackHour))),
-      minutesAfterSend: s.minutesAfterSend != null ? Math.max(5, Math.floor(Number(s.minutesAfterSend) || 30)) : undefined,
-      smsTemplate: typeof s.smsTemplate === "string" ? s.smsTemplate : "",
-      smsTemplateEs: typeof s.smsTemplateEs === "string" ? s.smsTemplateEs : "",
-    }))
+    .map((s) => {
+      const step: ReminderStep = {
+        day: Math.max(0, Math.floor(Number(s.day) || 0)),
+        hour: Math.min(20, Math.max(7, Math.floor(Number(s.hour) || fallbackHour))),
+        smsTemplate: typeof s.smsTemplate === "string" ? s.smsTemplate : "",
+        smsTemplateEs: typeof s.smsTemplateEs === "string" ? s.smsTemplateEs : "",
+      };
+      if (s.minutesAfterSend != null) {
+        step.minutesAfterSend = Math.max(5, Math.floor(Number(s.minutesAfterSend) || 30));
+      }
+      return step;
+    })
     .sort((a, b) => a.day - b.day || (a.minutesAfterSend ?? 0) - (b.minutesAfterSend ?? 0));
 }
 
