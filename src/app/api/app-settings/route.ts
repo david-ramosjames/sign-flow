@@ -29,6 +29,18 @@ const communicationTemplatesPatchSchema = z
     reminderSmsTemplateEs: z.string().min(1).optional(),
     reminderEmailSubjectTemplateEs: z.string().min(1).optional(),
     reminderEmailBodyTemplateEs: z.string().min(1).optional(),
+    signingSmsTemplateContract: z.string().optional(),
+    signingSmsTemplateContractEs: z.string().optional(),
+    reminderSmsTemplateContract: z.string().optional(),
+    reminderSmsTemplateContractEs: z.string().optional(),
+    signingEmailSubjectTemplateContract: z.string().optional(),
+    signingEmailBodyTemplateContract: z.string().optional(),
+    signingEmailSubjectTemplateContractEs: z.string().optional(),
+    signingEmailBodyTemplateContractEs: z.string().optional(),
+    reminderEmailSubjectTemplateContract: z.string().optional(),
+    reminderEmailBodyTemplateContract: z.string().optional(),
+    reminderEmailSubjectTemplateContractEs: z.string().optional(),
+    reminderEmailBodyTemplateContractEs: z.string().optional(),
   })
   .optional();
 

@@ -58,7 +58,37 @@ Le recordamos amablemente que revise y firme sus documentos — use el botón en
 {{url}}
 
 — {{firm}}`,
+  signingSmsTemplateContract: "",
+  signingSmsTemplateContractEs: "",
+  reminderSmsTemplateContract: "",
+  reminderSmsTemplateContractEs: "",
+  signingEmailSubjectTemplateContract: "",
+  signingEmailBodyTemplateContract: "",
+  signingEmailSubjectTemplateContractEs: "",
+  signingEmailBodyTemplateContractEs: "",
+  reminderEmailSubjectTemplateContract: "",
+  reminderEmailBodyTemplateContract: "",
+  reminderEmailSubjectTemplateContractEs: "",
+  reminderEmailBodyTemplateContractEs: "",
 };
+
+function orGeneral(specific: string | undefined, general: string): string {
+  const s = specific?.trim();
+  return s ? specific! : general;
+}
+
+function pickLang(
+  language: SupportedLanguage,
+  forContract: boolean,
+  en: string,
+  es: string,
+  enContract: string,
+  esContract: string,
+): string {
+  const english = forContract ? orGeneral(enContract, en) : en;
+  const spanish = forContract ? orGeneral(esContract, es) : es;
+  return templateForLanguage(language, english, spanish);
+}
 
 export function mergeCommunicationTemplates(settings: AppSettings | null): CommunicationTemplates {
   const o = settings?.communicationTemplates;
@@ -93,9 +123,17 @@ export function signingSmsFromSettings(
   clientName: string,
   url: string,
   language: SupportedLanguage = "en",
+  forContract = false,
 ): string {
   const t = mergeCommunicationTemplates(settings);
-  const template = templateForLanguage(language, t.signingSmsTemplate, t.signingSmsTemplateEs);
+  const template = pickLang(
+    language,
+    forContract,
+    t.signingSmsTemplate,
+    t.signingSmsTemplateEs,
+    t.signingSmsTemplateContract,
+    t.signingSmsTemplateContractEs,
+  );
   return applyTemplateString(template, { clientName, url, firm: t.firmName });
 }
 
@@ -104,15 +142,30 @@ export function signingEmailFromSettings(
   clientName: string,
   url: string,
   language: SupportedLanguage = "en",
+  forContract = false,
 ): { subject: string; text: string; html: string } {
   const t = mergeCommunicationTemplates(settings);
   const firm = t.firmName;
   const subject = applyTemplateString(
-    templateForLanguage(language, t.signingEmailSubjectTemplate, t.signingEmailSubjectTemplateEs),
+    pickLang(
+      language,
+      forContract,
+      t.signingEmailSubjectTemplate,
+      t.signingEmailSubjectTemplateEs,
+      t.signingEmailSubjectTemplateContract,
+      t.signingEmailSubjectTemplateContractEs,
+    ),
     { clientName, url, firm },
   );
   const text = applyTemplateString(
-    templateForLanguage(language, t.signingEmailBodyTemplate, t.signingEmailBodyTemplateEs),
+    pickLang(
+      language,
+      forContract,
+      t.signingEmailBodyTemplate,
+      t.signingEmailBodyTemplateEs,
+      t.signingEmailBodyTemplateContract,
+      t.signingEmailBodyTemplateContractEs,
+    ),
     { clientName, url, firm },
   );
   const { before, after } = splitEmailBodyAroundUrl(text, url);
@@ -142,6 +195,7 @@ export function reminderSmsFromSettings(
   reminderIndex?: number,
   /** Resolved schedule for this request’s form kind (contract vs general). */
   schedule?: { steps?: { smsTemplate: string; smsTemplateEs: string }[] },
+  forContract = false,
 ): string {
   const t = mergeCommunicationTemplates(settings);
   const steps = schedule?.steps ?? settings?.reminderSchedule?.steps;
@@ -154,7 +208,14 @@ export function reminderSmsFromSettings(
       }
     }
   }
-  const template = templateForLanguage(language, t.reminderSmsTemplate, t.reminderSmsTemplateEs);
+  const template = pickLang(
+    language,
+    forContract,
+    t.reminderSmsTemplate,
+    t.reminderSmsTemplateEs,
+    t.reminderSmsTemplateContract,
+    t.reminderSmsTemplateContractEs,
+  );
   return applyTemplateString(template, { clientName, url, firm: t.firmName });
 }
 
@@ -163,15 +224,30 @@ export function reminderEmailFromSettings(
   clientName: string,
   url: string,
   language: SupportedLanguage = "en",
+  forContract = false,
 ): { subject: string; text: string; html: string } {
   const t = mergeCommunicationTemplates(settings);
   const firm = t.firmName;
   const subject = applyTemplateString(
-    templateForLanguage(language, t.reminderEmailSubjectTemplate, t.reminderEmailSubjectTemplateEs),
+    pickLang(
+      language,
+      forContract,
+      t.reminderEmailSubjectTemplate,
+      t.reminderEmailSubjectTemplateEs,
+      t.reminderEmailSubjectTemplateContract,
+      t.reminderEmailSubjectTemplateContractEs,
+    ),
     { clientName, url, firm },
   );
   const text = applyTemplateString(
-    templateForLanguage(language, t.reminderEmailBodyTemplate, t.reminderEmailBodyTemplateEs),
+    pickLang(
+      language,
+      forContract,
+      t.reminderEmailBodyTemplate,
+      t.reminderEmailBodyTemplateEs,
+      t.reminderEmailBodyTemplateContract,
+      t.reminderEmailBodyTemplateContractEs,
+    ),
     { clientName, url, firm },
   );
   const { before, after } = splitEmailBodyAroundUrl(text, url);

@@ -217,7 +217,7 @@ export async function createLeadAndSigningRequest(
     try {
       await sendSms(
         lead.phone,
-        signingSmsFromSettings(appSettings, lead.clientName, signingUrl, language),
+        signingSmsFromSettings(appSettings, lead.clientName, signingUrl, language, formKind === "contract"),
         quo,
       );
       signingRequest.sentViaSms = true;
@@ -240,6 +240,7 @@ export async function createLeadAndSigningRequest(
       lead.clientName,
       signingUrl,
       language,
+      formKind === "contract",
     );
     const mail = await sendTransactionalEmail({ to: lead.email, subject, textBody: text, htmlBody: html });
     if (!mail.ok) throw new Error(mail.error);
@@ -440,7 +441,7 @@ export async function resendSigningNotifications(
     if (!req.phone?.trim()) throw new Error("No phone number on file for this request; add a phone number to resend SMS.");
     await sendSms(
       req.phone,
-      signingSmsFromSettings(appSettings, req.clientName, req.signingUrl, req.language),
+      signingSmsFromSettings(appSettings, req.clientName, req.signingUrl, req.language, req.formKind === "contract"),
       quo,
     );
     await appendSigningEvent({ signingRequestId, leadId: req.leadId, type: "sms_sent", metadata: { resend: true } });
@@ -452,6 +453,7 @@ export async function resendSigningNotifications(
       req.clientName,
       req.signingUrl,
       req.language,
+      req.formKind === "contract",
     );
     const mail = await sendTransactionalEmail({ to: req.email, subject, textBody: text, htmlBody: html });
     if (!mail.ok) throw new Error(mail.error);
@@ -808,6 +810,7 @@ export async function runReminderForRequest(
           req.language,
           req.reminderCount,
           reminderSchedule,
+          req.formKind === "contract",
         ),
         quo,
       );
@@ -834,6 +837,7 @@ export async function runReminderForRequest(
       req.clientName,
       req.signingUrl,
       req.language,
+      req.formKind === "contract",
     );
     const mail = await sendTransactionalEmail({ to: req.email, subject, textBody: text, htmlBody: html });
     if (!mail.ok) {

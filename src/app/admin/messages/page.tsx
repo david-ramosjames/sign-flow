@@ -10,11 +10,10 @@ import type {
   ReminderStep,
   SupportedLanguage,
 } from "@/types/models";
-import { DEFAULT_COMMUNICATION_TEMPLATES, applyTemplateString } from "@/lib/messaging";
+import { DEFAULT_COMMUNICATION_TEMPLATES, applyTemplateString, reminderEmailFromSettings, reminderSmsFromSettings, signingEmailFromSettings, signingSmsFromSettings } from "@/lib/messaging";
 import { templateForLanguage } from "@/lib/message-language";
 import { DEFAULT_COMPLETION_NOTIFICATIONS } from "@/lib/completion-notifications";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
-import { buildBrandedEmailHtml, splitEmailBodyAroundUrl } from "@/lib/email-html-layout";
 import { DEFAULT_REMINDER_SCHEDULE, mergeReminderSchedule, buildDefaultSteps } from "@/lib/reminder-schedule";
 
 const PREVIEW = {
@@ -161,7 +160,6 @@ export default function AdminMessagesPage() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [previewEmailAssetBase, setPreviewEmailAssetBase] = useState<string | null>(null);
   const [previewLanguage, setPreviewLanguage] = useState<SupportedLanguage>("en");
   const [sequenceTab, setSequenceTab] = useState<"contract" | "general">("contract");
 
@@ -182,12 +180,6 @@ export default function AdminMessagesPage() {
   }, []);
 
   useEffect(() => {
-    setPreviewEmailAssetBase(
-      process.env.NEXT_PUBLIC_SIGNFLOW_EMAIL_PUBLIC_ORIGIN?.trim().replace(/\/+$/, "") || null,
-    );
-  }, []);
-
-  useEffect(() => {
     void load();
   }, [load]);
 
@@ -196,36 +188,34 @@ export default function AdminMessagesPage() {
     [comm.firmName],
   );
 
+  const previewSettings = useMemo(
+    () => ({ communicationTemplates: comm } as AppSettings),
+    [comm],
+  );
+  const forContractPreview = sequenceTab === "contract";
+
   const previewSigningSms = useMemo(
-    () => applyTemplateString(templateForLanguage(previewLanguage, comm.signingSmsTemplate, comm.signingSmsTemplateEs), previewVars),
-    [comm.signingSmsTemplate, comm.signingSmsTemplateEs, previewLanguage, previewVars],
+    () => signingSmsFromSettings(previewSettings, PREVIEW.clientName, PREVIEW.url, previewLanguage, forContractPreview),
+    [previewSettings, previewLanguage, forContractPreview],
   );
   const previewReminderSms = useMemo(
-    () => applyTemplateString(templateForLanguage(previewLanguage, comm.reminderSmsTemplate, comm.reminderSmsTemplateEs), previewVars),
-    [comm.reminderSmsTemplate, comm.reminderSmsTemplateEs, previewLanguage, previewVars],
+    () => reminderSmsFromSettings(previewSettings, PREVIEW.clientName, PREVIEW.url, previewLanguage, undefined, undefined, forContractPreview),
+    [previewSettings, previewLanguage, forContractPreview],
   );
   const previewThankYouSms = useMemo(
     () => applyTemplateString(templateForLanguage(previewLanguage, completion.thankYouSmsTemplate, completion.thankYouSmsTemplateEs), previewVars),
     [completion.thankYouSmsTemplate, completion.thankYouSmsTemplateEs, previewLanguage, previewVars],
   );
 
-  const previewSigningEmail = useMemo(() => {
-    const subject = applyTemplateString(templateForLanguage(previewLanguage, comm.signingEmailSubjectTemplate, comm.signingEmailSubjectTemplateEs), previewVars);
-    const text = applyTemplateString(templateForLanguage(previewLanguage, comm.signingEmailBodyTemplate, comm.signingEmailBodyTemplateEs), previewVars);
-    const { before, after } = splitEmailBodyAroundUrl(text, PREVIEW.url);
-    const footerPlain = applyTemplateString(templateForLanguage(previewLanguage, comm.emailHtmlFooterTemplate, comm.emailHtmlFooterTemplateEs), previewVars);
-    const html = buildBrandedEmailHtml({ kind: "signing", beforeUrlPlain: before, afterUrlPlain: after, signingUrl: PREVIEW.url, firm: comm.firmName, firmLogoUrl: comm.firmLogoUrl?.trim() || null, footerPlain, assetBaseUrl: previewEmailAssetBase });
-    return { subject, text, html };
-  }, [comm.signingEmailBodyTemplate, comm.signingEmailSubjectTemplate, comm.signingEmailBodyTemplateEs, comm.signingEmailSubjectTemplateEs, comm.emailHtmlFooterTemplate, comm.emailHtmlFooterTemplateEs, comm.firmName, comm.firmLogoUrl, previewEmailAssetBase, previewLanguage, previewVars]);
+  const previewSigningEmail = useMemo(
+    () => signingEmailFromSettings(previewSettings, PREVIEW.clientName, PREVIEW.url, previewLanguage, forContractPreview),
+    [previewSettings, previewLanguage, forContractPreview],
+  );
 
-  const previewReminderEmail = useMemo(() => {
-    const subject = applyTemplateString(templateForLanguage(previewLanguage, comm.reminderEmailSubjectTemplate, comm.reminderEmailSubjectTemplateEs), previewVars);
-    const text = applyTemplateString(templateForLanguage(previewLanguage, comm.reminderEmailBodyTemplate, comm.reminderEmailBodyTemplateEs), previewVars);
-    const { before, after } = splitEmailBodyAroundUrl(text, PREVIEW.url);
-    const footerPlain = applyTemplateString(templateForLanguage(previewLanguage, comm.emailHtmlFooterTemplate, comm.emailHtmlFooterTemplateEs), previewVars);
-    const html = buildBrandedEmailHtml({ kind: "reminder", beforeUrlPlain: before, afterUrlPlain: after, signingUrl: PREVIEW.url, firm: comm.firmName, firmLogoUrl: comm.firmLogoUrl?.trim() || null, footerPlain, assetBaseUrl: previewEmailAssetBase });
-    return { subject, text, html };
-  }, [comm.reminderEmailBodyTemplate, comm.reminderEmailSubjectTemplate, comm.reminderEmailBodyTemplateEs, comm.reminderEmailSubjectTemplateEs, comm.emailHtmlFooterTemplate, comm.emailHtmlFooterTemplateEs, comm.firmName, comm.firmLogoUrl, previewEmailAssetBase, previewLanguage, previewVars]);
+  const previewReminderEmail = useMemo(
+    () => reminderEmailFromSettings(previewSettings, PREVIEW.clientName, PREVIEW.url, previewLanguage, forContractPreview),
+    [previewSettings, previewLanguage, forContractPreview],
+  );
 
   const previewTeamEmail = useMemo(() => {
     const subject = applyTemplateString(completion.teamCompletedEmailSubjectTemplate, previewVars);
@@ -321,46 +311,97 @@ export default function AdminMessagesPage() {
           <div className="rounded-2xl border-2 border-blue-200 bg-blue-50/30 p-1">
             <div className="px-5 pt-5 pb-2">
               <h2 className="text-base font-bold text-slate-900">📱 Text messages (SMS)</h2>
-              <p className="mt-1 text-xs text-slate-600">All SMS templates. Each step in the sequence can have its own message.</p>
+              <p className="mt-1 text-xs text-slate-600">Switch between contract and general copy, then edit the sequence for that type.</p>
             </div>
-
-            {/* Initial send */}
-            <section className="m-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">Initial send — SMS (English)</h3>
-              <textarea className="mt-3 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.signingSmsTemplate} onChange={(e) => setComm((c) => ({ ...c, signingSmsTemplate: e.target.value }))} />
-            </section>
-            <section className="m-3 rounded-xl border border-amber-200/80 bg-amber-50/40 p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">Initial send — SMS (Spanish)</h3>
-              <textarea className="mt-3 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.signingSmsTemplateEs} onChange={(e) => setComm((c) => ({ ...c, signingSmsTemplateEs: e.target.value }))} />
-            </section>
-
-            {/* Default reminder SMS */}
-            <section className="m-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">Default reminder — SMS (English)</h3>
-              <p className="mt-1 text-xs text-slate-500">Used for any follow-up step that doesn't have its own template.</p>
-              <textarea className="mt-3 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.reminderSmsTemplate} onChange={(e) => setComm((c) => ({ ...c, reminderSmsTemplate: e.target.value }))} />
-            </section>
-            <section className="m-3 rounded-xl border border-amber-200/80 bg-amber-50/40 p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">Default reminder — SMS (Spanish)</h3>
-              <textarea className="mt-3 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.reminderSmsTemplateEs} onChange={(e) => setComm((c) => ({ ...c, reminderSmsTemplateEs: e.target.value }))} />
-            </section>
-
             <div className="m-3 flex gap-2">
               <button
                 type="button"
                 className={`rounded-xl px-3 py-1.5 text-sm font-medium ${sequenceTab === "contract" ? "bg-[color:var(--brand-navy)] text-white" : "bg-white text-slate-700 ring-1 ring-slate-200"}`}
                 onClick={() => setSequenceTab("contract")}
               >
-                Contract sequence
+                Contract
               </button>
               <button
                 type="button"
                 className={`rounded-xl px-3 py-1.5 text-sm font-medium ${sequenceTab === "general" ? "bg-[color:var(--brand-navy)] text-white" : "bg-white text-slate-700 ring-1 ring-slate-200"}`}
                 onClick={() => setSequenceTab("general")}
               >
-                General sequence
+                General
               </button>
             </div>
+
+            {/* Initial send */}
+            <section className="m-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-900">
+                {sequenceTab === "contract" ? "Contract initial send — SMS (English)" : "General initial send — SMS (English)"}
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">
+                {sequenceTab === "contract"
+                  ? "Leave blank to use the general initial-send SMS."
+                  : "Used for HIPAA, SAR, Disbursement, and other non-contract sends."}
+              </p>
+              <textarea
+                className="mt-3 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={sequenceTab === "contract" ? comm.signingSmsTemplateContract : comm.signingSmsTemplate}
+                onChange={(e) =>
+                  setComm((c) =>
+                    sequenceTab === "contract"
+                      ? { ...c, signingSmsTemplateContract: e.target.value }
+                      : { ...c, signingSmsTemplate: e.target.value },
+                  )
+                }
+              />
+            </section>
+            <section className="m-3 rounded-xl border border-amber-200/80 bg-amber-50/40 p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-900">
+                {sequenceTab === "contract" ? "Contract initial send — SMS (Spanish)" : "General initial send — SMS (Spanish)"}
+              </h3>
+              <textarea
+                className="mt-3 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={sequenceTab === "contract" ? comm.signingSmsTemplateContractEs : comm.signingSmsTemplateEs}
+                onChange={(e) =>
+                  setComm((c) =>
+                    sequenceTab === "contract"
+                      ? { ...c, signingSmsTemplateContractEs: e.target.value }
+                      : { ...c, signingSmsTemplateEs: e.target.value },
+                  )
+                }
+              />
+            </section>
+            <section className="m-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-900">
+                {sequenceTab === "contract" ? "Contract default reminder — SMS (English)" : "General default reminder — SMS (English)"}
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">Used for follow-up steps that don’t have their own custom SMS.</p>
+              <textarea
+                className="mt-3 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={sequenceTab === "contract" ? comm.reminderSmsTemplateContract : comm.reminderSmsTemplate}
+                onChange={(e) =>
+                  setComm((c) =>
+                    sequenceTab === "contract"
+                      ? { ...c, reminderSmsTemplateContract: e.target.value }
+                      : { ...c, reminderSmsTemplate: e.target.value },
+                  )
+                }
+              />
+            </section>
+            <section className="m-3 rounded-xl border border-amber-200/80 bg-amber-50/40 p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-900">
+                {sequenceTab === "contract" ? "Contract default reminder — SMS (Spanish)" : "General default reminder — SMS (Spanish)"}
+              </h3>
+              <textarea
+                className="mt-3 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={sequenceTab === "contract" ? comm.reminderSmsTemplateContractEs : comm.reminderSmsTemplateEs}
+                onChange={(e) =>
+                  setComm((c) =>
+                    sequenceTab === "contract"
+                      ? { ...c, reminderSmsTemplateContractEs: e.target.value }
+                      : { ...c, reminderSmsTemplateEs: e.target.value },
+                  )
+                }
+              />
+            </section>
+
             {sequenceTab === "contract" ? (
               <SequenceEditor
                 title="Contract follow-ups"
@@ -398,40 +439,155 @@ export default function AdminMessagesPage() {
           <div className="rounded-2xl border-2 border-purple-200 bg-purple-50/30 p-1">
             <div className="px-5 pt-5 pb-2">
               <h2 className="text-base font-bold text-slate-900">📧 Email</h2>
-              <p className="mt-1 text-xs text-slate-600">Signing, reminder, and team notification emails.</p>
+              <p className="mt-1 text-xs text-slate-600">Uses the same Contract / General switch as SMS. Team notification is shared.</p>
+            </div>
+            <div className="m-3 flex gap-2">
+              <button
+                type="button"
+                className={`rounded-xl px-3 py-1.5 text-sm font-medium ${sequenceTab === "contract" ? "bg-[color:var(--brand-navy)] text-white" : "bg-white text-slate-700 ring-1 ring-slate-200"}`}
+                onClick={() => setSequenceTab("contract")}
+              >
+                Contract
+              </button>
+              <button
+                type="button"
+                className={`rounded-xl px-3 py-1.5 text-sm font-medium ${sequenceTab === "general" ? "bg-[color:var(--brand-navy)] text-white" : "bg-white text-slate-700 ring-1 ring-slate-200"}`}
+                onClick={() => setSequenceTab("general")}
+              >
+                General
+              </button>
             </div>
 
             <section className="m-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">Signing — email (English)</h3>
+              <h3 className="text-sm font-semibold text-slate-900">
+                {sequenceTab === "contract" ? "Contract signing — email (English)" : "General signing — email (English)"}
+              </h3>
+              {sequenceTab === "contract" ? (
+                <p className="mt-1 text-xs text-slate-500">Leave blank to use the general signing email.</p>
+              ) : null}
               <label className="mt-3 block text-xs font-medium text-slate-600">Subject</label>
-              <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.signingEmailSubjectTemplate} onChange={(e) => setComm((c) => ({ ...c, signingEmailSubjectTemplate: e.target.value }))} />
+              <input
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={sequenceTab === "contract" ? comm.signingEmailSubjectTemplateContract : comm.signingEmailSubjectTemplate}
+                onChange={(e) =>
+                  setComm((c) =>
+                    sequenceTab === "contract"
+                      ? { ...c, signingEmailSubjectTemplateContract: e.target.value }
+                      : { ...c, signingEmailSubjectTemplate: e.target.value },
+                  )
+                }
+              />
               <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
-              <textarea className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.signingEmailBodyTemplate} onChange={(e) => setComm((c) => ({ ...c, signingEmailBodyTemplate: e.target.value }))} />
-              <label className="mt-4 block text-xs font-medium text-slate-600">HTML email footer (signing + reminders)</label>
-              <textarea className="mt-1 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.emailHtmlFooterTemplate} onChange={(e) => setComm((c) => ({ ...c, emailHtmlFooterTemplate: e.target.value }))} />
+              <textarea
+                className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={sequenceTab === "contract" ? comm.signingEmailBodyTemplateContract : comm.signingEmailBodyTemplate}
+                onChange={(e) =>
+                  setComm((c) =>
+                    sequenceTab === "contract"
+                      ? { ...c, signingEmailBodyTemplateContract: e.target.value }
+                      : { ...c, signingEmailBodyTemplate: e.target.value },
+                  )
+                }
+              />
+              {sequenceTab === "general" ? (
+                <>
+                  <label className="mt-4 block text-xs font-medium text-slate-600">HTML email footer (signing + reminders)</label>
+                  <textarea className="mt-1 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.emailHtmlFooterTemplate} onChange={(e) => setComm((c) => ({ ...c, emailHtmlFooterTemplate: e.target.value }))} />
+                </>
+              ) : null}
             </section>
             <section className="m-3 rounded-xl border border-amber-200/80 bg-amber-50/40 p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">Signing — email (Spanish)</h3>
+              <h3 className="text-sm font-semibold text-slate-900">
+                {sequenceTab === "contract" ? "Contract signing — email (Spanish)" : "General signing — email (Spanish)"}
+              </h3>
               <label className="mt-3 block text-xs font-medium text-slate-600">Subject</label>
-              <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.signingEmailSubjectTemplateEs} onChange={(e) => setComm((c) => ({ ...c, signingEmailSubjectTemplateEs: e.target.value }))} />
+              <input
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={sequenceTab === "contract" ? comm.signingEmailSubjectTemplateContractEs : comm.signingEmailSubjectTemplateEs}
+                onChange={(e) =>
+                  setComm((c) =>
+                    sequenceTab === "contract"
+                      ? { ...c, signingEmailSubjectTemplateContractEs: e.target.value }
+                      : { ...c, signingEmailSubjectTemplateEs: e.target.value },
+                  )
+                }
+              />
               <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
-              <textarea className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.signingEmailBodyTemplateEs} onChange={(e) => setComm((c) => ({ ...c, signingEmailBodyTemplateEs: e.target.value }))} />
-              <label className="mt-4 block text-xs font-medium text-slate-600">HTML email footer (Spanish)</label>
-              <textarea className="mt-1 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.emailHtmlFooterTemplateEs} onChange={(e) => setComm((c) => ({ ...c, emailHtmlFooterTemplateEs: e.target.value }))} />
+              <textarea
+                className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={sequenceTab === "contract" ? comm.signingEmailBodyTemplateContractEs : comm.signingEmailBodyTemplateEs}
+                onChange={(e) =>
+                  setComm((c) =>
+                    sequenceTab === "contract"
+                      ? { ...c, signingEmailBodyTemplateContractEs: e.target.value }
+                      : { ...c, signingEmailBodyTemplateEs: e.target.value },
+                  )
+                }
+              />
+              {sequenceTab === "general" ? (
+                <>
+                  <label className="mt-4 block text-xs font-medium text-slate-600">HTML email footer (Spanish)</label>
+                  <textarea className="mt-1 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.emailHtmlFooterTemplateEs} onChange={(e) => setComm((c) => ({ ...c, emailHtmlFooterTemplateEs: e.target.value }))} />
+                </>
+              ) : null}
             </section>
             <section className="m-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">Reminder — email (English)</h3>
+              <h3 className="text-sm font-semibold text-slate-900">
+                {sequenceTab === "contract" ? "Contract reminder — email (English)" : "General reminder — email (English)"}
+              </h3>
               <label className="mt-3 block text-xs font-medium text-slate-600">Subject</label>
-              <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.reminderEmailSubjectTemplate} onChange={(e) => setComm((c) => ({ ...c, reminderEmailSubjectTemplate: e.target.value }))} />
+              <input
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={sequenceTab === "contract" ? comm.reminderEmailSubjectTemplateContract : comm.reminderEmailSubjectTemplate}
+                onChange={(e) =>
+                  setComm((c) =>
+                    sequenceTab === "contract"
+                      ? { ...c, reminderEmailSubjectTemplateContract: e.target.value }
+                      : { ...c, reminderEmailSubjectTemplate: e.target.value },
+                  )
+                }
+              />
               <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
-              <textarea className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.reminderEmailBodyTemplate} onChange={(e) => setComm((c) => ({ ...c, reminderEmailBodyTemplate: e.target.value }))} />
+              <textarea
+                className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={sequenceTab === "contract" ? comm.reminderEmailBodyTemplateContract : comm.reminderEmailBodyTemplate}
+                onChange={(e) =>
+                  setComm((c) =>
+                    sequenceTab === "contract"
+                      ? { ...c, reminderEmailBodyTemplateContract: e.target.value }
+                      : { ...c, reminderEmailBodyTemplate: e.target.value },
+                  )
+                }
+              />
             </section>
             <section className="m-3 rounded-xl border border-amber-200/80 bg-amber-50/40 p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">Reminder — email (Spanish)</h3>
+              <h3 className="text-sm font-semibold text-slate-900">
+                {sequenceTab === "contract" ? "Contract reminder — email (Spanish)" : "General reminder — email (Spanish)"}
+              </h3>
               <label className="mt-3 block text-xs font-medium text-slate-600">Subject</label>
-              <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.reminderEmailSubjectTemplateEs} onChange={(e) => setComm((c) => ({ ...c, reminderEmailSubjectTemplateEs: e.target.value }))} />
+              <input
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={sequenceTab === "contract" ? comm.reminderEmailSubjectTemplateContractEs : comm.reminderEmailSubjectTemplateEs}
+                onChange={(e) =>
+                  setComm((c) =>
+                    sequenceTab === "contract"
+                      ? { ...c, reminderEmailSubjectTemplateContractEs: e.target.value }
+                      : { ...c, reminderEmailSubjectTemplateEs: e.target.value },
+                  )
+                }
+              />
               <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
-              <textarea className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.reminderEmailBodyTemplateEs} onChange={(e) => setComm((c) => ({ ...c, reminderEmailBodyTemplateEs: e.target.value }))} />
+              <textarea
+                className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={sequenceTab === "contract" ? comm.reminderEmailBodyTemplateContractEs : comm.reminderEmailBodyTemplateEs}
+                onChange={(e) =>
+                  setComm((c) =>
+                    sequenceTab === "contract"
+                      ? { ...c, reminderEmailBodyTemplateContractEs: e.target.value }
+                      : { ...c, reminderEmailBodyTemplateEs: e.target.value },
+                  )
+                }
+              />
             </section>
             <section className="m-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-900">After signing — team email</h3>
@@ -475,11 +631,15 @@ export default function AdminMessagesPage() {
             </p>
             <div className="mt-4 space-y-4 text-sm">
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-blue-600">Signing SMS</div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                  {forContractPreview ? "Contract" : "General"} signing SMS
+                </div>
                 <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs text-slate-800 ring-1 ring-slate-200">{previewSigningSms}</pre>
               </div>
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-blue-600">Default reminder SMS</div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                  {forContractPreview ? "Contract" : "General"} default reminder SMS
+                </div>
                 <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs text-slate-800 ring-1 ring-slate-200">{previewReminderSms}</pre>
               </div>
               {previewSequenceSteps.map((step, idx) =>

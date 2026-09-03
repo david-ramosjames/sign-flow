@@ -199,6 +199,19 @@ export type CommunicationTemplates = {
   reminderSmsTemplateEs: string;
   reminderEmailSubjectTemplateEs: string;
   reminderEmailBodyTemplateEs: string;
+  /** Contract-only copy. Empty = use the general templates above. */
+  signingSmsTemplateContract: string;
+  signingSmsTemplateContractEs: string;
+  reminderSmsTemplateContract: string;
+  reminderSmsTemplateContractEs: string;
+  signingEmailSubjectTemplateContract: string;
+  signingEmailBodyTemplateContract: string;
+  signingEmailSubjectTemplateContractEs: string;
+  signingEmailBodyTemplateContractEs: string;
+  reminderEmailSubjectTemplateContract: string;
+  reminderEmailBodyTemplateContract: string;
+  reminderEmailSubjectTemplateContractEs: string;
+  reminderEmailBodyTemplateContractEs: string;
 };
 
 /** Sent when DocuSeal marks a submission completed. Editable in Admin → Messages. */
