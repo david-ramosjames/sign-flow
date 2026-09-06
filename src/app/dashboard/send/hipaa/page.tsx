@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, startTransition, type ReactNode } from "react";
+import { QuoFromNumberSelect } from "@/components/quo-from-number-select";
 import { filterHipaaTemplates } from "@/lib/docuseal-prefill";
-import type { DocuSealTemplateSummary, HipaaFormPrefill, OutboundDeliverySettings } from "@/types/models";
+import type { DocuSealTemplateSummary, HipaaFormPrefill, OutboundDeliverySettings, QuoPhoneNumberOption } from "@/types/models";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 
 function emptyOptional(value: string): string | null {
@@ -68,6 +69,8 @@ export default function SendHipaaPage() {
   const [error, setError] = useState<string | null>(null);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [quoReady, setQuoReady] = useState<boolean | null>(null);
+  const [quoPhoneNumbers, setQuoPhoneNumbers] = useState<QuoPhoneNumberOption[]>([]);
+  const [quoPhoneNumberId, setQuoPhoneNumberId] = useState("");
   const [smsEnabled, setSmsEnabled] = useState(DEFAULT_OUTBOUND_DELIVERY.signingSmsEnabled);
 
   async function loadTemplates() {
@@ -101,11 +104,24 @@ export default function SendHipaaPage() {
       const j = (await res.json()) as {
         item?: { outboundDelivery?: OutboundDeliverySettings } | null;
         env?: { hasQuoApiKey?: boolean; hasQuoFromNumber?: boolean };
+        quo?: {
+          phoneNumbers?: QuoPhoneNumberOption[];
+          defaultContractPhoneNumberId?: string | null;
+          defaultGeneralPhoneNumberId?: string | null;
+        };
       };
       const e = j.env;
       const od = { ...DEFAULT_OUTBOUND_DELIVERY, ...(j.item?.outboundDelivery ?? {}) };
+      const numbers = j.quo?.phoneNumbers ?? [];
+      const defaultId =
+        j.quo?.defaultGeneralPhoneNumberId?.trim() ||
+        j.quo?.defaultContractPhoneNumberId?.trim() ||
+        numbers[0]?.id ||
+        "";
       startTransition(() => {
         if (e) setQuoReady(Boolean(e.hasQuoApiKey && e.hasQuoFromNumber));
+        setQuoPhoneNumbers(numbers);
+        setQuoPhoneNumberId(defaultId);
         setSmsEnabled(od.signingSmsEnabled);
       });
     })();
@@ -225,6 +241,7 @@ export default function SendHipaaPage() {
               sendSms: true,
               sendEmail: false,
               reminderEnabled,
+              quoPhoneNumberId: quoPhoneNumberId || null,
             }),
           });
           setBusy(false);
@@ -507,6 +524,8 @@ export default function SendHipaaPage() {
             />
           </label>
         </div>
+
+        <QuoFromNumberSelect numbers={quoPhoneNumbers} value={quoPhoneNumberId} onChange={setQuoPhoneNumberId} />
 
         <label className="flex items-center gap-2 text-sm font-medium text-slate-900">
           <input type="checkbox" checked={reminderEnabled} onChange={(e) => setReminderEnabled(e.target.checked)} />

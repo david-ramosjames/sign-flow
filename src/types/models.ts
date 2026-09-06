@@ -20,6 +20,16 @@ export type Firm = {
   updatedAt: string;
 };
 
+/** Quo/OpenPhone workspace number (imported via API; safe to show in UI). */
+export type QuoPhoneNumberOption = {
+  /** Quo phone number id (`PN…`). */
+  id: string;
+  /** E.164 number. */
+  number: string;
+  /** Display name from Quo. */
+  name: string;
+};
+
 /** Server-only per-firm integration credentials. Never sent to the browser. */
 export type FirmSecrets = {
   firmId: string;
@@ -28,8 +38,16 @@ export type FirmSecrets = {
   docusealAdminBaseUrl: string | null;
   docusealWebhookSecret: string | null;
   quoApiKey: string | null;
+  /** @deprecated Prefer imported `quoPhoneNumbers` + defaults. Kept as fallback. */
   quoFromNumber: string | null;
+  /** @deprecated Prefer `quoDefaultContractPhoneNumberId` / `quoDefaultGeneralPhoneNumberId`. */
   quoPhoneNumberId: string | null;
+  /** Imported Quo workspace numbers (from GET /v1/phone-numbers). */
+  quoPhoneNumbers: QuoPhoneNumberOption[] | null;
+  /** Default from-number for contract sends (`PN…`). */
+  quoDefaultContractPhoneNumberId: string | null;
+  /** Default from-number for HIPAA / SAR / Disbursement / other sends (`PN…`). */
+  quoDefaultGeneralPhoneNumberId: string | null;
   /** Quo/OpenPhone webhook signing secret (whsec_…) for this firm’s STOP webhook. */
   quoWebhookSecret: string | null;
   updatedAt: string;
@@ -132,6 +150,8 @@ export type SigningRequest = {
   status: SigningStatus;
   sentViaSms: boolean;
   sentViaEmail: boolean;
+  /** Quo from-number id (`PN…`) used for SMS on this request (reminders reuse it). */
+  quoPhoneNumberId?: string | null;
   reminderEnabled: boolean;
   reminderCount: number;
   nextReminderAt: string | null;

@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { getSignFlowStore } from "@/lib/db";
 import { nowIso } from "@/lib/time";
-import type { Firm, FirmSecrets } from "@/types/models";
+import type { Firm, FirmSecrets, QuoPhoneNumberOption, SigningFormKind } from "@/types/models";
 import {
   DEFAULT_FIRM_ID,
   FIRM_COOKIE,
@@ -80,12 +80,24 @@ export type FirmPublic = {
   docusealAdminBaseUrl: string | null;
   quoFromNumber: string | null;
   quoPhoneNumberId: string | null;
+  quoPhoneNumbers: QuoPhoneNumberOption[];
+  quoDefaultContractPhoneNumberId: string | null;
+  quoDefaultGeneralPhoneNumberId: string | null;
   /** True when a firm-specific secret is stored (value never returned). */
   hasDocusealApiKey: boolean;
   hasDocusealWebhookSecret: boolean;
   hasQuoApiKey: boolean;
   hasQuoWebhookSecret: boolean;
 };
+
+function firmHasQuoFrom(secrets: FirmSecrets | null): boolean {
+  if (!secrets) return false;
+  if (secrets.quoDefaultContractPhoneNumberId?.trim() || secrets.quoDefaultGeneralPhoneNumberId?.trim()) {
+    return true;
+  }
+  if ((secrets.quoPhoneNumbers?.length ?? 0) > 0) return true;
+  return Boolean(secrets.quoFromNumber?.trim() || secrets.quoPhoneNumberId?.trim());
+}
 
 export function firmSecretsConfigured(secrets: FirmSecrets | null): {
   docusealConfigured: boolean;
@@ -96,6 +108,9 @@ export function firmSecretsConfigured(secrets: FirmSecrets | null): {
   docusealAdminBaseUrl: string | null;
   quoFromNumber: string | null;
   quoPhoneNumberId: string | null;
+  quoPhoneNumbers: QuoPhoneNumberOption[];
+  quoDefaultContractPhoneNumberId: string | null;
+  quoDefaultGeneralPhoneNumberId: string | null;
   hasDocusealApiKey: boolean;
   hasDocusealWebhookSecret: boolean;
   hasQuoApiKey: boolean;
@@ -103,9 +118,7 @@ export function firmSecretsConfigured(secrets: FirmSecrets | null): {
 } {
   const hasFirmDocuseal = Boolean(secrets?.docusealApiKey?.trim());
   const hasEnvDocuseal = Boolean(process.env.DOCUSEAL_API_KEY?.trim());
-  const hasFirmQuo = Boolean(
-    secrets?.quoApiKey?.trim() && (secrets.quoFromNumber?.trim() || secrets.quoPhoneNumberId?.trim()),
-  );
+  const hasFirmQuo = Boolean(secrets?.quoApiKey?.trim() && firmHasQuoFrom(secrets));
   const hasEnvQuo = Boolean(
     process.env.QUO_API_KEY?.trim() && (process.env.QUO_FROM_NUMBER?.trim() || process.env.QUO_PHONE_NUMBER_ID?.trim()),
   );
@@ -118,6 +131,9 @@ export function firmSecretsConfigured(secrets: FirmSecrets | null): {
     docusealAdminBaseUrl: secrets?.docusealAdminBaseUrl?.trim() || null,
     quoFromNumber: secrets?.quoFromNumber?.trim() || null,
     quoPhoneNumberId: secrets?.quoPhoneNumberId?.trim() || null,
+    quoPhoneNumbers: secrets?.quoPhoneNumbers ?? [],
+    quoDefaultContractPhoneNumberId: secrets?.quoDefaultContractPhoneNumberId?.trim() || null,
+    quoDefaultGeneralPhoneNumberId: secrets?.quoDefaultGeneralPhoneNumberId?.trim() || null,
     hasDocusealApiKey: hasFirmDocuseal,
     hasDocusealWebhookSecret: Boolean(secrets?.docusealWebhookSecret?.trim()),
     hasQuoApiKey: Boolean(secrets?.quoApiKey?.trim()),
@@ -160,12 +176,64 @@ export async function getFirmDocusealConnection(firmId: string): Promise<Docusea
   };
 }
 
-export async function getFirmQuoConnection(firmId: string): Promise<QuoConnection | undefined> {
+export type ResolveQuoFromOptions = {
+  /** Explicit override from the send form (`PN…`). */
+  phoneNumberId?: string | null;
+  /** When no override, pick contract vs general default. */
+  forContract?: boolean;
+};
+
+/** Resolve which Quo from-id to use (override → kind default → legacy). */
+export function resolveFirmQuoPhoneNumberId(
+  secrets: FirmSecrets | null | undefined,
+  opts?: ResolveQuoFromOptions,
+): string | null {
+  const override = opts?.phoneNumberId?.trim();
+  if (override) return override.startsWith("PN") ? override : `PN${override}`;
+
+  if (opts?.forContract === true) {
+    const c = secrets?.quoDefaultContractPhoneNumberId?.trim();
+    if (c) return c;
+  }
+  if (opts?.forContract === false) {
+    const g = secrets?.quoDefaultGeneralPhoneNumberId?.trim();
+    if (g) return g;
+  }
+
+  const anyDefault =
+    secrets?.quoDefaultContractPhoneNumberId?.trim() || secrets?.quoDefaultGeneralPhoneNumberId?.trim();
+  if (anyDefault) return anyDefault;
+
+  const legacy = secrets?.quoPhoneNumberId?.trim();
+  if (legacy) return legacy.startsWith("PN") ? legacy : `PN${legacy}`;
+  return null;
+}
+
+export function formKindUsesContractQuoDefault(formKind: SigningFormKind | null | undefined): boolean {
+  return formKind === "contract";
+}
+
+export async function getFirmQuoConnection(
+  firmId: string,
+  opts?: ResolveQuoFromOptions,
+): Promise<QuoConnection | undefined> {
   const secrets = await getSignFlowStore().getFirmSecrets(firmId);
-  if (!secrets?.quoApiKey?.trim()) return undefined;
+  const firmKey = secrets?.quoApiKey?.trim();
+  const apiKey = firmKey || process.env.QUO_API_KEY?.trim();
+  if (!apiKey) return undefined;
+
+  const phoneNumberId = resolveFirmQuoPhoneNumberId(secrets, opts);
+  if (firmKey) {
+    return {
+      apiKey: firmKey,
+      fromNumber: phoneNumberId ? null : secrets?.quoFromNumber ?? null,
+      phoneNumberId: phoneNumberId || secrets?.quoPhoneNumberId || null,
+    };
+  }
+
   return {
-    apiKey: secrets.quoApiKey,
-    fromNumber: secrets.quoFromNumber,
-    phoneNumberId: secrets.quoPhoneNumberId,
+    apiKey,
+    fromNumber: phoneNumberId ? null : process.env.QUO_FROM_NUMBER ?? null,
+    phoneNumberId: phoneNumberId || process.env.QUO_PHONE_NUMBER_ID || null,
   };
 }

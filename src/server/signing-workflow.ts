@@ -63,15 +63,17 @@ export type CreateSigningRequestInput = {
    * and only the reminder schedule should follow up if they don't finish.
    */
   allowNoDelivery?: boolean;
+  /** Quo from-number id (`PN…`) override for this send. */
+  quoPhoneNumberId?: string | null;
 };
 
-async function firmRuntime(firmId: string) {
+async function firmRuntime(firmId: string, quoOpts?: { phoneNumberId?: string | null; forContract?: boolean }) {
   const id = firmId.trim() || DEFAULT_FIRM_ID;
   const store = getSignFlowStore();
   const [appSettings, docuseal, quo] = await Promise.all([
     store.getAppSettings(id),
     getFirmDocusealConnection(id),
-    getFirmQuoConnection(id),
+    getFirmQuoConnection(id, quoOpts),
   ]);
   return { firmId: id, appSettings, docuseal, quo };
 }
@@ -82,7 +84,7 @@ export async function createLeadAndSigningRequest(
 ): Promise<{ lead: Lead; signingRequest: SigningRequest; deliveryWarning: string | null }> {
   const store = getSignFlowStore();
   const firmId = input.firmId?.trim() || DEFAULT_FIRM_ID;
-  const { appSettings, docuseal, quo } = await firmRuntime(firmId);
+  const { appSettings, docuseal } = await firmRuntime(firmId);
   const now = nowIso();
   const leadId = newId("lead");
   const reqId = newId("sig");
@@ -90,6 +92,11 @@ export async function createLeadAndSigningRequest(
   const template = await getTemplate(input.templateId, docuseal);
   const formKind = detectSigningFormKind(template.name);
   const reminderSchedule = reminderScheduleForFormKind(appSettings, formKind);
+  const quo = await getFirmQuoConnection(firmId, {
+    phoneNumberId: input.quoPhoneNumberId,
+    forContract: formKind === "contract",
+  });
+  const resolvedQuoPhoneNumberId = quo?.phoneNumberId?.trim() || null;
 
   if (templateRequiresDateOfLoss(template.name) && !input.dateOfLoss?.trim()) {
     throw new Error("Date of loss is required for this contract template.");
@@ -164,6 +171,7 @@ export async function createLeadAndSigningRequest(
     dateOfLoss: input.dateOfLoss?.trim() || null,
     formKind,
     hipaaPrefill,
+    quoPhoneNumberId: resolvedQuoPhoneNumberId,
     docusealSubmissionId: primary.submission_id,
     docusealSubmitterId: primary.id ?? null,
     signingUrl,
@@ -427,7 +435,11 @@ export async function resendSigningNotifications(
   const req = raw ? await repairStoredDocusealUrls(raw) : null;
   if (!req?.signingUrl) throw new Error("Signing request not found or missing URL.");
   if (!isActiveSigningRequest(req)) throw new Error("This signing request was cancelled.");
-  const { appSettings, quo } = await firmRuntime(documentFirmId(req));
+  const firmId = documentFirmId(req);
+  const { appSettings, quo } = await firmRuntime(firmId, {
+    phoneNumberId: req.quoPhoneNumberId,
+    forContract: req.formKind === "contract",
+  });
   const outbound = mergeOutboundDelivery(appSettings);
 
   if (opts.sms && !outbound.signingSmsEnabled) {
@@ -607,7 +619,10 @@ export async function applyDocusealCompletionToRequest(input: {
     metadata: { source: input.source ?? "docuseal" },
   });
 
-  const { appSettings, quo } = await firmRuntime(documentFirmId(req));
+  const { appSettings, quo } = await firmRuntime(documentFirmId(req), {
+    phoneNumberId: req.quoPhoneNumberId,
+    forContract: req.formKind === "contract",
+  });
   const completionSettings = mergeCompletionNotifications(appSettings);
   const documentUrl = req.signedPdfUrl ?? req.signingUrl ?? "";
 
@@ -760,7 +775,10 @@ export async function runReminderForRequest(
     return null;
   }
   const store = getSignFlowStore();
-  const { appSettings, quo } = await firmRuntime(documentFirmId(req));
+  const { appSettings, quo } = await firmRuntime(documentFirmId(req), {
+    phoneNumberId: req.quoPhoneNumberId,
+    forContract: req.formKind === "contract",
+  });
   const outbound = mergeOutboundDelivery(appSettings);
   const reminderSchedule = reminderScheduleForFormKind(appSettings, req.formKind);
   if (req.reminderCount >= reminderSchedule.maxAutoReminders) {

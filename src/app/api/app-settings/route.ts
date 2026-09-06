@@ -106,9 +106,29 @@ export async function GET() {
   const item = existing
     ? { ...existing, outboundDelivery: mergeOutboundDelivery(existing) }
     : null;
-  const [docuseal, quo] = await Promise.all([getFirmDocusealConnection(firmId), getFirmQuoConnection(firmId)]);
+  const [docuseal, quo, secrets] = await Promise.all([
+    getFirmDocusealConnection(firmId),
+    getFirmQuoConnection(firmId),
+    store.getFirmSecrets(firmId),
+  ]);
+  const phoneNumbers = secrets?.quoPhoneNumbers ?? [];
+  const defaultContractPhoneNumberId = secrets?.quoDefaultContractPhoneNumberId?.trim() || null;
+  const defaultGeneralPhoneNumberId = secrets?.quoDefaultGeneralPhoneNumberId?.trim() || null;
+  const hasQuoFromNumber = Boolean(
+    defaultContractPhoneNumberId ||
+      defaultGeneralPhoneNumberId ||
+      quo?.fromNumber?.trim() ||
+      quo?.phoneNumberId?.trim() ||
+      process.env.QUO_FROM_NUMBER ||
+      process.env.QUO_PHONE_NUMBER_ID,
+  );
   return NextResponse.json({
     item,
+    quo: {
+      phoneNumbers,
+      defaultContractPhoneNumberId,
+      defaultGeneralPhoneNumberId,
+    },
     env: {
       hasDocusealApiKey: Boolean(docuseal.apiKey?.trim() || process.env.DOCUSEAL_API_KEY),
       hasDocusealApiUrl: Boolean(docuseal.apiUrl?.trim() || process.env.DOCUSEAL_API_URL),
@@ -123,12 +143,7 @@ export async function GET() {
       hasGoogleClientSecret: Boolean(process.env.GOOGLE_CLIENT_SECRET),
       hasSignFlowSessionSecret: Boolean(process.env.SIGNFLOW_SESSION_SECRET),
       hasQuoApiKey: Boolean(quo?.apiKey?.trim() || process.env.QUO_API_KEY),
-      hasQuoFromNumber: Boolean(
-        quo?.fromNumber?.trim() ||
-          quo?.phoneNumberId?.trim() ||
-          process.env.QUO_FROM_NUMBER ||
-          process.env.QUO_PHONE_NUMBER_ID,
-      ),
+      hasQuoFromNumber,
       hasGmailWorkspaceDelegation: isGmailWorkspaceDelegationConfigured(),
       hasSendgrid: Boolean(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL),
       hasGmailUserOAuth: Boolean(process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_EMAIL_FROM),

@@ -33,6 +33,8 @@ const patchSchema = z.object({
   quoFromNumber: z.string().optional().nullable(),
   quoPhoneNumberId: z.string().optional().nullable(),
   quoWebhookSecret: z.string().optional().nullable(),
+  quoDefaultContractPhoneNumberId: z.string().optional().nullable(),
+  quoDefaultGeneralPhoneNumberId: z.string().optional().nullable(),
 });
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -60,6 +62,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   await store.upsertFirm(firm);
 
   const existing = (await store.getFirmSecrets(id)) ?? emptyFirmSecrets(id, now);
+  const contractDefault =
+    parsed.data.quoDefaultContractPhoneNumberId !== undefined
+      ? parsed.data.quoDefaultContractPhoneNumberId?.trim() || null
+      : existing.quoDefaultContractPhoneNumberId ?? null;
+  const generalDefault =
+    parsed.data.quoDefaultGeneralPhoneNumberId !== undefined
+      ? parsed.data.quoDefaultGeneralPhoneNumberId?.trim() || null
+      : existing.quoDefaultGeneralPhoneNumberId ?? null;
+  const numbers = existing.quoPhoneNumbers ?? [];
+  const primaryId = generalDefault ?? contractDefault;
+  const primaryNumber = numbers.find((n) => n.id === primaryId)?.number ?? null;
   const secrets: FirmSecrets = {
     ...existing,
     firmId: id,
@@ -68,8 +81,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     docusealAdminBaseUrl: keep(parsed.data.docusealAdminBaseUrl, existing.docusealAdminBaseUrl),
     docusealWebhookSecret: keep(parsed.data.docusealWebhookSecret, existing.docusealWebhookSecret),
     quoApiKey: keep(parsed.data.quoApiKey, existing.quoApiKey),
-    quoFromNumber: keep(parsed.data.quoFromNumber, existing.quoFromNumber),
-    quoPhoneNumberId: keep(parsed.data.quoPhoneNumberId, existing.quoPhoneNumberId),
+    quoFromNumber:
+      parsed.data.quoFromNumber !== undefined
+        ? keep(parsed.data.quoFromNumber, existing.quoFromNumber)
+        : primaryNumber ?? existing.quoFromNumber,
+    quoPhoneNumberId:
+      parsed.data.quoPhoneNumberId !== undefined
+        ? keep(parsed.data.quoPhoneNumberId, existing.quoPhoneNumberId)
+        : primaryId ?? existing.quoPhoneNumberId,
+    quoPhoneNumbers: existing.quoPhoneNumbers ?? null,
+    quoDefaultContractPhoneNumberId: contractDefault,
+    quoDefaultGeneralPhoneNumberId: generalDefault,
     quoWebhookSecret: keep(parsed.data.quoWebhookSecret, existing.quoWebhookSecret ?? null),
     updatedAt: now,
   };

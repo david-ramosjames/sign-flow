@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, startTransition } from "react";
+import { QuoFromNumberSelect } from "@/components/quo-from-number-select";
 import { filterContractTemplates, languageFromContractTemplate, templateRequiresDateOfLoss } from "@/lib/docuseal-prefill";
-import type { DocuSealTemplateSummary, OutboundDeliverySettings } from "@/types/models";
+import type { DocuSealTemplateSummary, OutboundDeliverySettings, QuoPhoneNumberOption } from "@/types/models";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 
 export default function SendContractPage() {
@@ -23,6 +24,8 @@ export default function SendContractPage() {
   const [error, setError] = useState<string | null>(null);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [quoReady, setQuoReady] = useState<boolean | null>(null);
+  const [quoPhoneNumbers, setQuoPhoneNumbers] = useState<QuoPhoneNumberOption[]>([]);
+  const [quoPhoneNumberId, setQuoPhoneNumberId] = useState("");
   const [outbound, setOutbound] = useState<OutboundDeliverySettings>(DEFAULT_OUTBOUND_DELIVERY);
 
   async function loadTemplates() {
@@ -56,11 +59,24 @@ export default function SendContractPage() {
       const j = (await res.json()) as {
         item?: { outboundDelivery?: OutboundDeliverySettings } | null;
         env?: { hasQuoApiKey?: boolean; hasQuoFromNumber?: boolean };
+        quo?: {
+          phoneNumbers?: QuoPhoneNumberOption[];
+          defaultContractPhoneNumberId?: string | null;
+          defaultGeneralPhoneNumberId?: string | null;
+        };
       };
       const e = j.env;
       const od = { ...DEFAULT_OUTBOUND_DELIVERY, ...(j.item?.outboundDelivery ?? {}) };
+      const numbers = j.quo?.phoneNumbers ?? [];
+      const defaultId =
+        j.quo?.defaultContractPhoneNumberId?.trim() ||
+        j.quo?.defaultGeneralPhoneNumberId?.trim() ||
+        numbers[0]?.id ||
+        "";
       startTransition(() => {
         if (e) setQuoReady(Boolean(e.hasQuoApiKey && e.hasQuoFromNumber));
+        setQuoPhoneNumbers(numbers);
+        setQuoPhoneNumberId(defaultId);
         setOutbound(od);
         if (!od.signingSmsEnabled) setSendSms(false);
         if (!od.signingEmailEnabled) setSendEmail(false);
@@ -109,11 +125,8 @@ export default function SendContractPage() {
 
       {quoReady === false && sendSms && outbound.signingSmsEnabled ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-          <strong>SMS will not send</strong> until <code className="text-xs">QUO_API_KEY</code> and{" "}
-          <code className="text-xs">QUO_FROM_NUMBER</code> (or <code className="text-xs">QUO_PHONE_NUMBER_ID</code>) are
-          set — use a number from your Quo workspace, not another provider. US numbers require Quo carrier (A2P)
-          registration. For local testing without Quo, set{" "}
-          <code className="text-xs">QUO_SMS_MOCK=true</code>
+          <strong>SMS will not send</strong> until this firm has a Quo API key and imported from-numbers (Admin →
+          Firms). For local testing without Quo, set <code className="text-xs">QUO_SMS_MOCK=true</code>
           {outbound.signingEmailEnabled ? " or uncheck SMS and use email only." : "."}
         </div>
       ) : null}
@@ -164,6 +177,7 @@ export default function SendContractPage() {
               sendSms,
               sendEmail,
               reminderEnabled,
+              quoPhoneNumberId: sendSms && quoPhoneNumberId ? quoPhoneNumberId : null,
             }),
           });
           setBusy(false);
@@ -267,6 +281,15 @@ export default function SendContractPage() {
             ) : null}
           </div>
         )}
+
+        {outbound.signingSmsEnabled ? (
+          <QuoFromNumberSelect
+            numbers={quoPhoneNumbers}
+            value={quoPhoneNumberId}
+            onChange={setQuoPhoneNumberId}
+            disabled={!sendSms && outbound.signingEmailEnabled}
+          />
+        ) : null}
 
         <div>
           <label className="text-sm font-medium text-slate-900">SMS language</label>

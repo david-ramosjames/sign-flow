@@ -80,6 +80,8 @@ const postSchema = z.object({
   hipaaPrefill: hipaaPrefillSchema.optional().nullable(),
   source: z.string().optional(),
   assignedTo: z.string().optional().nullable(),
+  /** Quo from-number id (`PN…`) override for this send. */
+  quoPhoneNumberId: z.string().optional().nullable(),
 });
 
 export async function GET() {
@@ -183,6 +185,7 @@ export async function POST(req: Request) {
         reminderEnabled: parsed.data.reminderEnabled,
         assignedTo: parsed.data.assignedTo ?? null,
         firmId,
+        quoPhoneNumberId: parsed.data.quoPhoneNumberId?.trim() || null,
       },
       actor,
     );

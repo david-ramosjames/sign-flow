@@ -9,9 +9,48 @@ export type SendSmsResult = {
 
 const PN_ID = /^PN[a-zA-Z0-9]+$/;
 const QUO_MESSAGES_URL = "https://api.openphone.com/v1/messages";
+const QUO_PHONE_NUMBERS_URL = "https://api.openphone.com/v1/phone-numbers";
 const SMS_ATTEMPTS = 2;
 const SMS_TIMEOUT_MS = 15_000;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504, 524]);
+
+export type QuoPhoneNumberListItem = {
+  id: string;
+  number: string;
+  name: string;
+};
+
+/** List workspace phone numbers from Quo (OpenPhone). */
+export async function listQuoPhoneNumbers(apiKey: string): Promise<QuoPhoneNumberListItem[]> {
+  const key = apiKey.trim();
+  if (!key) throw new Error("Quo API key is required to import phone numbers.");
+
+  const res = await fetch(QUO_PHONE_NUMBERS_URL, {
+    method: "GET",
+    headers: { Authorization: key, accept: "application/json" },
+    signal: AbortSignal.timeout(SMS_TIMEOUT_MS),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Quo phone-numbers failed (HTTP ${res.status}): ${formatQuoFailure(res.status, text, "QUO_API_KEY")}`);
+  }
+  let json: { data?: Array<{ id?: string; number?: string; name?: string; formattedNumber?: string | null }> };
+  try {
+    json = JSON.parse(text) as typeof json;
+  } catch {
+    throw new Error("Quo phone-numbers returned invalid JSON.");
+  }
+  const rows = Array.isArray(json.data) ? json.data : [];
+  return rows
+    .map((row) => {
+      const id = row.id?.trim() ?? "";
+      const number = (row.number?.trim() || row.formattedNumber?.trim() || "").replace(/\s/g, "");
+      const name = row.name?.trim() || number || id;
+      if (!id.startsWith("PN") || !number) return null;
+      return { id, number, name };
+    })
+    .filter((x): x is QuoPhoneNumberListItem => Boolean(x));
+}
 
 export type QuoConnection = {
   apiKey?: string | null;

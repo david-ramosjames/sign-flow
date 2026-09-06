@@ -2,6 +2,7 @@
 
 import { useEffect, useState, startTransition } from "react";
 import { CLEAR_FIRM_SECRET, DEFAULT_FIRM_ID } from "@/lib/firm-scope";
+import type { QuoPhoneNumberOption } from "@/types/models";
 
 type FirmPublic = {
   id: string;
@@ -17,6 +18,9 @@ type FirmPublic = {
   docusealAdminBaseUrl: string | null;
   quoFromNumber: string | null;
   quoPhoneNumberId: string | null;
+  quoPhoneNumbers: QuoPhoneNumberOption[];
+  quoDefaultContractPhoneNumberId: string | null;
+  quoDefaultGeneralPhoneNumberId: string | null;
   hasDocusealApiKey: boolean;
   hasDocusealWebhookSecret: boolean;
   hasQuoApiKey: boolean;
@@ -32,9 +36,9 @@ const emptyForm = {
   docusealAdminBaseUrl: "",
   docusealWebhookSecret: "",
   quoApiKey: "",
-  quoFromNumber: "",
-  quoPhoneNumberId: "",
   quoWebhookSecret: "",
+  quoDefaultContractPhoneNumberId: "",
+  quoDefaultGeneralPhoneNumberId: "",
 };
 
 function formFromFirm(f: FirmPublic) {
@@ -44,13 +48,18 @@ function formFromFirm(f: FirmPublic) {
     memberEmails: f.memberEmails.join("\n"),
     docusealApiUrl: f.docusealApiUrl ?? "",
     docusealAdminBaseUrl: f.docusealAdminBaseUrl ?? "",
-    quoFromNumber: f.quoFromNumber ?? "",
-    quoPhoneNumberId: f.quoPhoneNumberId ?? "",
     docusealApiKey: "",
     docusealWebhookSecret: "",
     quoApiKey: "",
     quoWebhookSecret: "",
+    quoDefaultContractPhoneNumberId: f.quoDefaultContractPhoneNumberId ?? "",
+    quoDefaultGeneralPhoneNumberId: f.quoDefaultGeneralPhoneNumberId ?? "",
   };
+}
+
+function phoneLabel(n: QuoPhoneNumberOption): string {
+  const name = n.name?.trim();
+  return name ? `${name} (${n.number})` : n.number;
 }
 
 export default function AdminFirmsPage() {
@@ -60,6 +69,7 @@ export default function AdminFirmsPage() {
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [forbidden, setForbidden] = useState(false);
   const [origin, setOrigin] = useState("");
 
@@ -104,6 +114,31 @@ export default function AdminFirmsPage() {
     await load();
   }
 
+  async function importQuoNumbers() {
+    if (selectedId === "new") return;
+    setImporting(true);
+    setError(null);
+    setOk(null);
+    const res = await fetch(`/api/admin/firms/${selectedId}/quo-import`, {
+      method: "POST",
+      credentials: "include",
+    });
+    setImporting(false);
+    if (!res.ok) {
+      const j = (await res.json().catch(() => null)) as { error?: string } | null;
+      setError(typeof j?.error === "string" ? j.error : "Import failed");
+      return;
+    }
+    const j = (await res.json()) as { item: FirmPublic; imported: number };
+    setOk(
+      j.imported === 0
+        ? "Quo returned no phone numbers for this API key."
+        : `Imported ${j.imported} Quo number${j.imported === 1 ? "" : "s"}. Set contract and other-send defaults below.`,
+    );
+    await load();
+    setForm(formFromFirm(j.item));
+  }
+
   useEffect(() => {
     setOrigin(window.location.origin);
     void load();
@@ -120,6 +155,7 @@ export default function AdminFirmsPage() {
   }, [selectedId, items]);
 
   const selected = items.find((x) => x.id === selectedId);
+  const phoneNumbers = selected?.quoPhoneNumbers ?? [];
   const docusealWebhookPath =
     selectedId === "new"
       ? ""
@@ -199,9 +235,9 @@ export default function AdminFirmsPage() {
               docusealAdminBaseUrl: form.docusealAdminBaseUrl.trim() || null,
               docusealWebhookSecret: form.docusealWebhookSecret.trim() || null,
               quoApiKey: form.quoApiKey.trim() || null,
-              quoFromNumber: form.quoFromNumber.trim() || null,
-              quoPhoneNumberId: form.quoPhoneNumberId.trim() || null,
               quoWebhookSecret: form.quoWebhookSecret.trim() || null,
+              quoDefaultContractPhoneNumberId: form.quoDefaultContractPhoneNumberId.trim() || null,
+              quoDefaultGeneralPhoneNumberId: form.quoDefaultGeneralPhoneNumberId.trim() || null,
             };
             const res =
               selectedId === "new"
@@ -226,7 +262,7 @@ export default function AdminFirmsPage() {
             const j = (await res.json()) as { item: FirmPublic };
             setOk(
               selectedId === "new"
-                ? "Firm created."
+                ? "Firm created. Save a Quo API key, then Import Quo numbers to set SMS defaults."
                 : "Firm saved. API keys stay hidden after reload — leave those fields blank to keep the stored values.",
             );
             await load();
@@ -341,13 +377,13 @@ export default function AdminFirmsPage() {
           </div>
 
           <div className="border-t border-slate-100 pt-4">
-            <div className="text-sm font-semibold text-slate-900">SMS (optional)</div>
+            <div className="text-sm font-semibold text-slate-900">SMS (Quo)</div>
             <p className="mt-1 text-xs text-slate-500">
               {selected?.hasQuoApiKey
-                ? "This firm has a stored Quo API key. Leave the key blank to keep it. From number reloads below."
+                ? "This firm has a stored Quo API key. Leave the key blank to keep it. Import numbers from Quo, then set defaults for contracts vs other sends."
                 : selected?.usesEnvQuo
-                  ? "Using the shared Quo number until you add this firm’s own API key and from-number."
-                  : "Add this firm’s Quo API key and from-number, or leave blank to use env."}
+                  ? "Using the shared Quo env key until you add this firm’s own API key. You can still import numbers with the env key."
+                  : "Add this firm’s Quo API key, import numbers, then choose defaults."}
             </p>
             <label className="mt-3 block text-sm font-medium text-slate-900">Quo API key</label>
             <input
@@ -361,21 +397,69 @@ export default function AdminFirmsPage() {
             {selected?.hasQuoApiKey ? (
               <p className="mt-1 text-xs text-emerald-700">Quo API key is saved for this firm.</p>
             ) : null}
-            <label className="mt-3 block text-sm font-medium text-slate-900">From number (E.164)</label>
-            <input
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              value={form.quoFromNumber}
-              onChange={(e) => setForm((f) => ({ ...f, quoFromNumber: e.target.value }))}
-              placeholder="+1…"
-            />
-            <label className="mt-3 block text-sm font-medium text-slate-900">Phone number ID (optional)</label>
-            <input
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              value={form.quoPhoneNumberId}
-              onChange={(e) => setForm((f) => ({ ...f, quoPhoneNumberId: e.target.value }))}
-              placeholder="PN…"
-            />
-            <label className="mt-3 block text-sm font-medium text-slate-900">Quo webhook secret (STOP)</label>
+
+            {selectedId !== "new" ? (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={busy || importing}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+                  onClick={() => void importQuoNumbers()}
+                >
+                  {importing ? "Importing…" : "Import Quo numbers"}
+                </button>
+                <span className="text-xs text-slate-500">
+                  {phoneNumbers.length
+                    ? `${phoneNumbers.length} number${phoneNumbers.length === 1 ? "" : "s"} saved for this firm`
+                    : "No numbers imported yet"}
+                </span>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-slate-500">Create the firm first, then import Quo numbers.</p>
+            )}
+
+            {phoneNumbers.length > 0 ? (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-slate-900">Default for contracts</label>
+                  <p className="mt-0.5 text-xs text-slate-500">Used on Send contract unless staff pick another.</p>
+                  <select
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    value={form.quoDefaultContractPhoneNumberId}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, quoDefaultContractPhoneNumberId: e.target.value }))
+                    }
+                  >
+                    <option value="">Select…</option>
+                    {phoneNumbers.map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {phoneLabel(n)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-900">Default for other sends</label>
+                  <p className="mt-0.5 text-xs text-slate-500">HIPAA, SAR, disbursement, and other one-time forms.</p>
+                  <select
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    value={form.quoDefaultGeneralPhoneNumberId}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, quoDefaultGeneralPhoneNumberId: e.target.value }))
+                    }
+                  >
+                    <option value="">Select…</option>
+                    {phoneNumbers.map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {phoneLabel(n)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : null}
+
+            <label className="mt-4 block text-sm font-medium text-slate-900">Quo webhook secret (STOP)</label>
             <p className="mt-0.5 text-xs text-slate-500">
               Required when this firm uses its own Quo workspace. Paste the signing secret Quo shows when you create the
               webhook (often <code className="text-[11px]">whsec_…</code>).

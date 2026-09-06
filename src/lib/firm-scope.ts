@@ -30,6 +30,9 @@ export function emptyFirmSecrets(firmId: string, now: string): FirmSecrets {
     quoApiKey: null,
     quoFromNumber: null,
     quoPhoneNumberId: null,
+    quoPhoneNumbers: null,
+    quoDefaultContractPhoneNumberId: null,
+    quoDefaultGeneralPhoneNumberId: null,
     quoWebhookSecret: null,
     updatedAt: now,
   };

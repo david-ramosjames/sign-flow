@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, startTransition } from "react";
+import { QuoFromNumberSelect } from "@/components/quo-from-number-select";
 import {
   detectSigningFormKind,
   filterOneTimeTemplates,
   isDisbursementTemplate,
   isSarReleaseTemplate,
 } from "@/lib/docuseal-prefill";
-import type { DocuSealTemplateSummary, OutboundDeliverySettings } from "@/types/models";
+import type { DocuSealTemplateSummary, OutboundDeliverySettings, QuoPhoneNumberOption } from "@/types/models";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 
 export default function SendOneTimeFormPage() {
@@ -26,6 +27,8 @@ export default function SendOneTimeFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [quoReady, setQuoReady] = useState<boolean | null>(null);
+  const [quoPhoneNumbers, setQuoPhoneNumbers] = useState<QuoPhoneNumberOption[]>([]);
+  const [quoPhoneNumberId, setQuoPhoneNumberId] = useState("");
   const [outbound, setOutbound] = useState<OutboundDeliverySettings>(DEFAULT_OUTBOUND_DELIVERY);
 
   async function loadTemplates() {
@@ -59,11 +62,24 @@ export default function SendOneTimeFormPage() {
       const j = (await res.json()) as {
         item?: { outboundDelivery?: OutboundDeliverySettings } | null;
         env?: { hasQuoApiKey?: boolean; hasQuoFromNumber?: boolean };
+        quo?: {
+          phoneNumbers?: QuoPhoneNumberOption[];
+          defaultContractPhoneNumberId?: string | null;
+          defaultGeneralPhoneNumberId?: string | null;
+        };
       };
       const e = j.env;
       const od = { ...DEFAULT_OUTBOUND_DELIVERY, ...(j.item?.outboundDelivery ?? {}) };
+      const numbers = j.quo?.phoneNumbers ?? [];
+      const defaultId =
+        j.quo?.defaultGeneralPhoneNumberId?.trim() ||
+        j.quo?.defaultContractPhoneNumberId?.trim() ||
+        numbers[0]?.id ||
+        "";
       startTransition(() => {
         if (e) setQuoReady(Boolean(e.hasQuoApiKey && e.hasQuoFromNumber));
+        setQuoPhoneNumbers(numbers);
+        setQuoPhoneNumberId(defaultId);
         setOutbound(od);
         if (!od.signingSmsEnabled) setSendSms(false);
         if (!od.signingEmailEnabled) setSendEmail(false);
@@ -152,6 +168,7 @@ export default function SendOneTimeFormPage() {
               sendSms,
               sendEmail,
               reminderEnabled,
+              quoPhoneNumberId: sendSms && quoPhoneNumberId ? quoPhoneNumberId : null,
             }),
           });
           setBusy(false);
@@ -258,6 +275,15 @@ export default function SendOneTimeFormPage() {
             ) : null}
           </div>
         )}
+
+        {outbound.signingSmsEnabled ? (
+          <QuoFromNumberSelect
+            numbers={quoPhoneNumbers}
+            value={quoPhoneNumberId}
+            onChange={setQuoPhoneNumberId}
+            disabled={!sendSms && outbound.signingEmailEnabled}
+          />
+        ) : null}
 
         {outbound.signingSmsEnabled && outbound.signingEmailEnabled ? (
           <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
