@@ -9,7 +9,7 @@ import { DEFAULT_COMMUNICATION_TEMPLATES } from "@/lib/messaging";
 import { DEFAULT_REMINDER_SCHEDULE, mergeReminderSchedule } from "@/lib/reminder-schedule";
 import { DEFAULT_COMPLETION_NOTIFICATIONS } from "@/lib/completion-notifications";
 import { DEFAULT_OUTBOUND_DELIVERY, mergeOutboundDelivery } from "@/lib/outbound-delivery";
-import { getFirmDocusealConnection, getFirmQuoConnection } from "@/lib/firms";
+import { getFirmDocusealConnection, getFirmQuoConnection, selectableQuoPhoneNumbers } from "@/lib/firms";
 
 const communicationTemplatesPatchSchema = z
   .object({
@@ -111,7 +111,7 @@ export async function GET() {
     getFirmQuoConnection(firmId),
     store.getFirmSecrets(firmId),
   ]);
-  const phoneNumbers = secrets?.quoPhoneNumbers ?? [];
+  const phoneNumbers = selectableQuoPhoneNumbers(secrets);
   const defaultContractPhoneNumberId = secrets?.quoDefaultContractPhoneNumberId?.trim() || null;
   const defaultGeneralPhoneNumberId = secrets?.quoDefaultGeneralPhoneNumberId?.trim() || null;
   const hasQuoFromNumber = Boolean(

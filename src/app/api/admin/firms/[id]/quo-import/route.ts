@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireFirmSession } from "@/lib/auth/firm-session";
 import { getSignFlowStore } from "@/lib/db";
-import { emptyFirmSecrets, toFirmPublic } from "@/lib/firms";
+import { emptyFirmSecrets, pruneSelectableQuoPhoneNumberIds, toFirmPublic } from "@/lib/firms";
 import { listQuoPhoneNumbers } from "@/services/quo-service";
 import { nowIso } from "@/lib/time";
 import type { FirmSecrets, QuoPhoneNumberOption } from "@/types/models";
@@ -52,11 +52,16 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     if (!stillValid(contractDefault)) contractDefault = numbers[0]?.id ?? null;
     if (!stillValid(generalDefault)) generalDefault = numbers[0]?.id ?? null;
 
+    // Preserve which numbers staff may pick; drop ids Quo no longer returns.
+    // New numbers are not auto-enabled — admins opt them in under Firms.
+    const selectableIds = pruneSelectableQuoPhoneNumberIds(numbers, existing.quoSelectablePhoneNumberIds);
+
     // Keep legacy phoneNumberId in sync with general default for older code paths.
     const secrets: FirmSecrets = {
       ...existing,
       firmId: id,
       quoPhoneNumbers: numbers,
+      quoSelectablePhoneNumberIds: selectableIds,
       quoDefaultContractPhoneNumberId: contractDefault,
       quoDefaultGeneralPhoneNumberId: generalDefault,
       quoPhoneNumberId: generalDefault ?? existing.quoPhoneNumberId,

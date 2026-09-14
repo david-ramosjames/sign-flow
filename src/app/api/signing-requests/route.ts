@@ -5,6 +5,7 @@ import { getSignFlowStore } from "@/lib/db";
 import { isFirestoreNotProvisionedError } from "@/lib/db/firestore-errors";
 import { requireFirmSession } from "@/lib/auth/firm-session";
 import { belongsToFirm } from "@/lib/firm-scope";
+import { selectableQuoPhoneNumbers } from "@/lib/firms";
 import { mergeOutboundDelivery } from "@/lib/outbound-delivery";
 import { normalizeSigningRequestForDisplay } from "@/lib/signing-request-active";
 import { processDueReminders } from "@/server/reminder-processor";
@@ -165,6 +166,18 @@ export async function POST(req: Request) {
       { error: "Email for signing requests is disabled in Admin → Messages." },
       { status: 400 },
     );
+  }
+
+  const overrideQuoId = parsed.data.quoPhoneNumberId?.trim() || null;
+  if (overrideQuoId) {
+    const secrets = await getSignFlowStore().getFirmSecrets(firmId);
+    const allowed = selectableQuoPhoneNumbers(secrets);
+    if (allowed.length > 0 && !allowed.some((n) => n.id === overrideQuoId)) {
+      return NextResponse.json(
+        { error: "That Quo from-number is not enabled for this firm. Choose one from the list in Admin → Firms." },
+        { status: 400 },
+      );
+    }
   }
 
   try {

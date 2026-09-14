@@ -81,6 +81,8 @@ export type FirmPublic = {
   quoFromNumber: string | null;
   quoPhoneNumberId: string | null;
   quoPhoneNumbers: QuoPhoneNumberOption[];
+  /** Ids staff may pick on send forms (`null` = all imported). */
+  quoSelectablePhoneNumberIds: string[] | null;
   quoDefaultContractPhoneNumberId: string | null;
   quoDefaultGeneralPhoneNumberId: string | null;
   /** True when a firm-specific secret is stored (value never returned). */
@@ -109,6 +111,8 @@ export function firmSecretsConfigured(secrets: FirmSecrets | null): {
   quoFromNumber: string | null;
   quoPhoneNumberId: string | null;
   quoPhoneNumbers: QuoPhoneNumberOption[];
+  /** Ids staff may pick on send forms (`null` = all imported). */
+  quoSelectablePhoneNumberIds: string[] | null;
   quoDefaultContractPhoneNumberId: string | null;
   quoDefaultGeneralPhoneNumberId: string | null;
   hasDocusealApiKey: boolean;
@@ -132,6 +136,7 @@ export function firmSecretsConfigured(secrets: FirmSecrets | null): {
     quoFromNumber: secrets?.quoFromNumber?.trim() || null,
     quoPhoneNumberId: secrets?.quoPhoneNumberId?.trim() || null,
     quoPhoneNumbers: secrets?.quoPhoneNumbers ?? [],
+    quoSelectablePhoneNumberIds: secrets?.quoSelectablePhoneNumberIds ?? null,
     quoDefaultContractPhoneNumberId: secrets?.quoDefaultContractPhoneNumberId?.trim() || null,
     quoDefaultGeneralPhoneNumberId: secrets?.quoDefaultGeneralPhoneNumberId?.trim() || null,
     hasDocusealApiKey: hasFirmDocuseal,
@@ -139,6 +144,25 @@ export function firmSecretsConfigured(secrets: FirmSecrets | null): {
     hasQuoApiKey: Boolean(secrets?.quoApiKey?.trim()),
     hasQuoWebhookSecret: Boolean(secrets?.quoWebhookSecret?.trim()),
   };
+}
+
+/** Numbers staff may choose on send forms (filtered by firm setting). */
+export function selectableQuoPhoneNumbers(secrets: FirmSecrets | null | undefined): QuoPhoneNumberOption[] {
+  const all = secrets?.quoPhoneNumbers ?? [];
+  const ids = secrets?.quoSelectablePhoneNumberIds;
+  if (ids == null) return all;
+  const allowed = new Set(ids.map((id) => id.trim()).filter(Boolean));
+  return all.filter((n) => allowed.has(n.id));
+}
+
+/** Keep only ids that still exist in the imported list. */
+export function pruneSelectableQuoPhoneNumberIds(
+  numbers: QuoPhoneNumberOption[],
+  ids: string[] | null | undefined,
+): string[] | null {
+  if (ids == null) return null;
+  const valid = new Set(numbers.map((n) => n.id));
+  return ids.map((id) => id.trim()).filter((id) => id && valid.has(id));
 }
 
 export async function toFirmPublic(firm: Firm): Promise<FirmPublic> {

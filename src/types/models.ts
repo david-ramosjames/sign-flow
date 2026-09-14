@@ -44,6 +44,11 @@ export type FirmSecrets = {
   quoPhoneNumberId: string | null;
   /** Imported Quo workspace numbers (from GET /v1/phone-numbers). */
   quoPhoneNumbers: QuoPhoneNumberOption[] | null;
+  /**
+   * Subset of `quoPhoneNumbers` ids staff may pick on send forms.
+   * `null` = all imported (legacy until an admin narrows the list).
+   */
+  quoSelectablePhoneNumberIds: string[] | null;
   /** Default from-number for contract sends (`PN…`). */
   quoDefaultContractPhoneNumberId: string | null;
   /** Default from-number for HIPAA / SAR / Disbursement / other sends (`PN…`). */

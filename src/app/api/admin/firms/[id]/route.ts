@@ -4,7 +4,7 @@ import { requireFirmSession } from "@/lib/auth/firm-session";
 import { getSignFlowStore } from "@/lib/db";
 import { nowIso } from "@/lib/time";
 import { DEFAULT_FIRM_ID, CLEAR_FIRM_SECRET } from "@/lib/firm-scope";
-import { emptyFirmSecrets, parseMemberEmails, toFirmPublic } from "@/lib/firms";
+import { emptyFirmSecrets, parseMemberEmails, pruneSelectableQuoPhoneNumberIds, toFirmPublic } from "@/lib/firms";
 import type { FirmSecrets } from "@/types/models";
 
 async function requireAdmin() {
@@ -35,6 +35,7 @@ const patchSchema = z.object({
   quoWebhookSecret: z.string().optional().nullable(),
   quoDefaultContractPhoneNumberId: z.string().optional().nullable(),
   quoDefaultGeneralPhoneNumberId: z.string().optional().nullable(),
+  quoSelectablePhoneNumberIds: z.array(z.string()).optional().nullable(),
 });
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -62,15 +63,25 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   await store.upsertFirm(firm);
 
   const existing = (await store.getFirmSecrets(id)) ?? emptyFirmSecrets(id, now);
-  const contractDefault =
+  const numbers = existing.quoPhoneNumbers ?? [];
+  const selectableIds =
+    parsed.data.quoSelectablePhoneNumberIds !== undefined
+      ? pruneSelectableQuoPhoneNumberIds(numbers, parsed.data.quoSelectablePhoneNumberIds ?? [])
+      : pruneSelectableQuoPhoneNumberIds(numbers, existing.quoSelectablePhoneNumberIds);
+  const selectableSet =
+    selectableIds == null ? null : new Set(selectableIds);
+  const inSelectable = (id: string | null) =>
+    !id || selectableSet == null || selectableSet.has(id);
+  let contractDefault =
     parsed.data.quoDefaultContractPhoneNumberId !== undefined
       ? parsed.data.quoDefaultContractPhoneNumberId?.trim() || null
       : existing.quoDefaultContractPhoneNumberId ?? null;
-  const generalDefault =
+  let generalDefault =
     parsed.data.quoDefaultGeneralPhoneNumberId !== undefined
       ? parsed.data.quoDefaultGeneralPhoneNumberId?.trim() || null
       : existing.quoDefaultGeneralPhoneNumberId ?? null;
-  const numbers = existing.quoPhoneNumbers ?? [];
+  if (!inSelectable(contractDefault)) contractDefault = selectableIds?.[0] ?? null;
+  if (!inSelectable(generalDefault)) generalDefault = selectableIds?.[0] ?? null;
   const primaryId = generalDefault ?? contractDefault;
   const primaryNumber = numbers.find((n) => n.id === primaryId)?.number ?? null;
   const secrets: FirmSecrets = {
@@ -90,6 +101,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         ? keep(parsed.data.quoPhoneNumberId, existing.quoPhoneNumberId)
         : primaryId ?? existing.quoPhoneNumberId,
     quoPhoneNumbers: existing.quoPhoneNumbers ?? null,
+    quoSelectablePhoneNumberIds: selectableIds,
     quoDefaultContractPhoneNumberId: contractDefault,
     quoDefaultGeneralPhoneNumberId: generalDefault,
     quoWebhookSecret: keep(parsed.data.quoWebhookSecret, existing.quoWebhookSecret ?? null),

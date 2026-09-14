@@ -19,6 +19,7 @@ type FirmPublic = {
   quoFromNumber: string | null;
   quoPhoneNumberId: string | null;
   quoPhoneNumbers: QuoPhoneNumberOption[];
+  quoSelectablePhoneNumberIds: string[] | null;
   quoDefaultContractPhoneNumberId: string | null;
   quoDefaultGeneralPhoneNumberId: string | null;
   hasDocusealApiKey: boolean;
@@ -37,11 +38,17 @@ const emptyForm = {
   docusealWebhookSecret: "",
   quoApiKey: "",
   quoWebhookSecret: "",
+  quoSelectablePhoneNumberIds: [] as string[],
   quoDefaultContractPhoneNumberId: "",
   quoDefaultGeneralPhoneNumberId: "",
 };
 
 function formFromFirm(f: FirmPublic) {
+  const numbers = f.quoPhoneNumbers ?? [];
+  const selectable =
+    f.quoSelectablePhoneNumberIds == null
+      ? numbers.map((n) => n.id)
+      : f.quoSelectablePhoneNumberIds.filter((id) => numbers.some((n) => n.id === id));
   return {
     name: f.name,
     logoUrl: f.logoUrl ?? "",
@@ -52,6 +59,7 @@ function formFromFirm(f: FirmPublic) {
     docusealWebhookSecret: "",
     quoApiKey: "",
     quoWebhookSecret: "",
+    quoSelectablePhoneNumberIds: selectable,
     quoDefaultContractPhoneNumberId: f.quoDefaultContractPhoneNumberId ?? "",
     quoDefaultGeneralPhoneNumberId: f.quoDefaultGeneralPhoneNumberId ?? "",
   };
@@ -133,7 +141,7 @@ export default function AdminFirmsPage() {
     setOk(
       j.imported === 0
         ? "Quo returned no phone numbers for this API key."
-        : `Imported ${j.imported} Quo number${j.imported === 1 ? "" : "s"}. Set contract and other-send defaults below.`,
+        : `Imported ${j.imported} Quo number${j.imported === 1 ? "" : "s"}. Check which ones staff can send from, then set defaults.`,
     );
     await load();
     setForm(formFromFirm(j.item));
@@ -156,6 +164,7 @@ export default function AdminFirmsPage() {
 
   const selected = items.find((x) => x.id === selectedId);
   const phoneNumbers = selected?.quoPhoneNumbers ?? [];
+  const selectableNumbers = phoneNumbers.filter((n) => form.quoSelectablePhoneNumberIds.includes(n.id));
   const docusealWebhookPath =
     selectedId === "new"
       ? ""
@@ -236,6 +245,7 @@ export default function AdminFirmsPage() {
               docusealWebhookSecret: form.docusealWebhookSecret.trim() || null,
               quoApiKey: form.quoApiKey.trim() || null,
               quoWebhookSecret: form.quoWebhookSecret.trim() || null,
+              quoSelectablePhoneNumberIds: form.quoSelectablePhoneNumberIds,
               quoDefaultContractPhoneNumberId: form.quoDefaultContractPhoneNumberId.trim() || null,
               quoDefaultGeneralPhoneNumberId: form.quoDefaultGeneralPhoneNumberId.trim() || null,
             };
@@ -419,42 +429,115 @@ export default function AdminFirmsPage() {
             )}
 
             {phoneNumbers.length > 0 ? (
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="mt-4 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-900">Default for contracts</label>
-                  <p className="mt-0.5 text-xs text-slate-500">Used on Send contract unless staff pick another.</p>
-                  <select
-                    className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                    value={form.quoDefaultContractPhoneNumberId}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, quoDefaultContractPhoneNumberId: e.target.value }))
-                    }
-                  >
-                    <option value="">Select…</option>
-                    {phoneNumbers.map((n) => (
-                      <option key={n.id} value={n.id}>
-                        {phoneLabel(n)}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="text-sm font-medium text-slate-900">Send-from options</div>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Only checked numbers appear in the Send SMS from dropdown on send forms. Uncheck numbers staff
+                    should not use.
+                  </p>
+                  <div className="mt-2 max-h-56 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                    {phoneNumbers.map((n) => {
+                      const checked = form.quoSelectablePhoneNumberIds.includes(n.id);
+                      return (
+                        <label key={n.id} className="flex items-start gap-2 text-sm text-slate-800">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={checked}
+                            onChange={(e) => {
+                              const on = e.target.checked;
+                              setForm((f) => {
+                                const nextIds = on
+                                  ? [...f.quoSelectablePhoneNumberIds, n.id]
+                                  : f.quoSelectablePhoneNumberIds.filter((id) => id !== n.id);
+                                let contract = f.quoDefaultContractPhoneNumberId;
+                                let general = f.quoDefaultGeneralPhoneNumberId;
+                                if (!nextIds.includes(contract)) contract = nextIds[0] ?? "";
+                                if (!nextIds.includes(general)) general = nextIds[0] ?? "";
+                                return {
+                                  ...f,
+                                  quoSelectablePhoneNumberIds: nextIds,
+                                  quoDefaultContractPhoneNumberId: contract,
+                                  quoDefaultGeneralPhoneNumberId: general,
+                                };
+                              });
+                            }}
+                          />
+                          <span>{phoneLabel(n)}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          quoSelectablePhoneNumberIds: phoneNumbers.map((n) => n.id),
+                        }))
+                      }
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          quoSelectablePhoneNumberIds: [],
+                          quoDefaultContractPhoneNumberId: "",
+                          quoDefaultGeneralPhoneNumberId: "",
+                        }))
+                      }
+                    >
+                      Clear all
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-900">Default for other sends</label>
-                  <p className="mt-0.5 text-xs text-slate-500">HIPAA, SAR, disbursement, and other one-time forms.</p>
-                  <select
-                    className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                    value={form.quoDefaultGeneralPhoneNumberId}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, quoDefaultGeneralPhoneNumberId: e.target.value }))
-                    }
-                  >
-                    <option value="">Select…</option>
-                    {phoneNumbers.map((n) => (
-                      <option key={n.id} value={n.id}>
-                        {phoneLabel(n)}
-                      </option>
-                    ))}
-                  </select>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-900">Default for contracts</label>
+                    <p className="mt-0.5 text-xs text-slate-500">Used on Send contract unless staff pick another.</p>
+                    <select
+                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                      value={form.quoDefaultContractPhoneNumberId}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, quoDefaultContractPhoneNumberId: e.target.value }))
+                      }
+                      disabled={selectableNumbers.length === 0}
+                    >
+                      <option value="">Select…</option>
+                      {selectableNumbers.map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {phoneLabel(n)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-900">Default for other sends</label>
+                    <p className="mt-0.5 text-xs text-slate-500">HIPAA, SAR, disbursement, and other one-time forms.</p>
+                    <select
+                      className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                      value={form.quoDefaultGeneralPhoneNumberId}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, quoDefaultGeneralPhoneNumberId: e.target.value }))
+                      }
+                      disabled={selectableNumbers.length === 0}
+                    >
+                      <option value="">Select…</option>
+                      {selectableNumbers.map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {phoneLabel(n)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
             ) : null}
