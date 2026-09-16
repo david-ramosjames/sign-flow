@@ -24,6 +24,7 @@ import {
   detectSigningFormKind,
   isRjlHipaaTemplate,
   isOneTimeTemplate,
+  languageFromContractTemplate,
   resolveClientNameForSigningRequest,
   templateRequiresDateOfLoss,
   validateHipaaPrefill,
@@ -113,7 +114,9 @@ export async function createLeadAndSigningRequest(
     input.hipaaPrefill,
   );
   const language: SupportedLanguage =
-    formKind === "contract" ? input.language : "en";
+    formKind === "contract"
+      ? (languageFromContractTemplate(template.name) ?? input.language)
+      : "en";
 
   const hipaaPrefill = isRjlHipaaTemplate(template.name) ? (input.hipaaPrefill ?? null) : null;
 

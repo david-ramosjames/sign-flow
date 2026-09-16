@@ -126,6 +126,27 @@ export function languageFromContractTemplate(templateName: string): SupportedLan
   return null;
 }
 
+export function contractLanguageLabel(lang: SupportedLanguage | null): "English" | "Spanish" | null {
+  if (lang === "en") return "English";
+  if (lang === "es") return "Spanish";
+  return null;
+}
+
+/** English contracts first, then Spanish, then anything else. */
+export function sortContractTemplatesByLanguage<T extends { name: string }>(templates: T[]): T[] {
+  return [...templates].sort((a, b) => {
+    const rank = (name: string) => {
+      const lang = languageFromContractTemplate(name);
+      if (lang === "en") return 0;
+      if (lang === "es") return 1;
+      return 2;
+    };
+    const d = rank(a.name) - rank(b.name);
+    if (d !== 0) return d;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 /** Retired templates kept in DocuSeal for records — hidden from Sign Flow pickers. */
 export function isDeprecatedDocusealTemplate(templateName: string): boolean {
   return /\bold\b/i.test(templateName);
@@ -136,11 +157,13 @@ export function isVisibleDocusealTemplate(t: { name: string; archivedAt?: string
 }
 
 export function filterContractTemplates<T extends { name: string; archivedAt?: string | null }>(templates: T[]): T[] {
-  return templates.filter(
-    (t) =>
-      isVisibleDocusealTemplate(t) &&
-      !isOneTimeTemplate(t.name) &&
-      !isRjlHipaaTemplate(t.name),
+  return sortContractTemplatesByLanguage(
+    templates.filter(
+      (t) =>
+        isVisibleDocusealTemplate(t) &&
+        !isOneTimeTemplate(t.name) &&
+        !isRjlHipaaTemplate(t.name),
+    ),
   );
 }
 

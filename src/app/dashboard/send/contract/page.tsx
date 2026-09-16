@@ -16,7 +16,6 @@ export default function SendContractPage() {
   const [dateOfLoss, setDateOfLoss] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [language, setLanguage] = useState<"en" | "es">("en");
   const [sendSms, setSendSms] = useState(true);
   const [sendEmail, setSendEmail] = useState(false);
   const [reminderEnabled, setReminderEnabled] = useState(true);
@@ -43,7 +42,8 @@ export default function SendContractPage() {
       setTemplates(list);
       setTemplateId((prev) => {
         if (prev && list.some((t) => String(t.id) === prev)) return prev;
-        return list[0] ? String(list[0].id) : "";
+        const english = list.find((t) => languageFromContractTemplate(t.name) === "en");
+        return String((english ?? list[0])?.id ?? "");
       });
     });
   }
@@ -93,12 +93,33 @@ export default function SendContractPage() {
     [templates, templateId],
   );
   const needsDateOfLoss = selectedTemplate ? templateRequiresDateOfLoss(selectedTemplate.name) : false;
+  const contractLanguage = selectedTemplate ? languageFromContractTemplate(selectedTemplate.name) : null;
+  const language = contractLanguage ?? "en";
+  const languageLabel = contractLanguage === "es" ? "Spanish" : contractLanguage === "en" ? "English" : null;
+  const englishTemplates = useMemo(
+    () => templates.filter((t) => languageFromContractTemplate(t.name) === "en"),
+    [templates],
+  );
+  const spanishTemplates = useMemo(
+    () => templates.filter((t) => languageFromContractTemplate(t.name) === "es"),
+    [templates],
+  );
+  const otherTemplates = useMemo(
+    () => templates.filter((t) => languageFromContractTemplate(t.name) == null),
+    [templates],
+  );
+  const templateChoices = useMemo(() => {
+    if (contractLanguage === "es") return spanishTemplates;
+    if (contractLanguage === "en") return englishTemplates;
+    return otherTemplates;
+  }, [contractLanguage, englishTemplates, spanishTemplates, otherTemplates]);
 
-  useEffect(() => {
-    if (!selectedTemplate) return;
-    const fromContract = languageFromContractTemplate(selectedTemplate.name);
-    if (fromContract) setLanguage(fromContract);
-  }, [selectedTemplate?.id, selectedTemplate?.name]);
+  function selectContractLanguage(lang: "en" | "es") {
+    const pool = lang === "en" ? englishTemplates : spanishTemplates;
+    if (pool.length === 0) return;
+    const keep = pool.find((t) => String(t.id) === templateId);
+    setTemplateId(String((keep ?? pool[0]).id));
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -110,7 +131,7 @@ export default function SendContractPage() {
         </p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Send contract</h1>
         <p className="mt-1 text-sm text-[color:var(--muted)]">
-          English or Spanish intake contracts. Pre-fills client name, date of loss, and today&apos;s date (US Central).
+          English or Spanish intake contracts. Choose the language first — SMS and email always match that contract.
         </p>
       </div>
 
@@ -191,22 +212,79 @@ export default function SendContractPage() {
         }}
       >
         <div>
-          <label className="text-sm font-medium text-slate-900">Template</label>
-          <select
-            required
-            className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            value={templateId}
-            disabled={loadingTemplates}
-            onChange={(e) => setTemplateId(e.target.value)}
-          >
-            {loadingTemplates ? <option>Loading…</option> : null}
-            {!loadingTemplates && templates.length === 0 ? <option value="">No templates</option> : null}
-            {templates.map((t) => (
-              <option key={t.id} value={String(t.id)}>
-                {t.name}
-              </option>
-            ))}
-          </select>
+          <div className="text-sm font-medium text-slate-900">Contract language</div>
+          <p className="mt-0.5 text-xs text-slate-500">
+            This is the document the client will sign. Texts and emails use the same language.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              disabled={loadingTemplates || englishTemplates.length === 0}
+              onClick={() => selectContractLanguage("en")}
+              className={`rounded-2xl border-2 px-4 py-4 text-left transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                contractLanguage === "en"
+                  ? "border-[color:var(--brand-navy)] bg-[color:var(--brand-navy)] text-white shadow-sm"
+                  : "border-slate-200 bg-white text-slate-900 hover:border-slate-300"
+              }`}
+            >
+              <div className="text-lg font-semibold tracking-tight">English</div>
+              <div className={`mt-1 text-xs ${contractLanguage === "en" ? "text-white/80" : "text-slate-500"}`}>
+                English contract, SMS, and email
+              </div>
+            </button>
+            <button
+              type="button"
+              disabled={loadingTemplates || spanishTemplates.length === 0}
+              onClick={() => selectContractLanguage("es")}
+              className={`rounded-2xl border-2 px-4 py-4 text-left transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                contractLanguage === "es"
+                  ? "border-amber-500 bg-amber-500 text-amber-950 shadow-sm"
+                  : "border-slate-200 bg-white text-slate-900 hover:border-slate-300"
+              }`}
+            >
+              <div className="text-lg font-semibold tracking-tight">Spanish</div>
+              <div className={`mt-1 text-xs ${contractLanguage === "es" ? "text-amber-950/80" : "text-slate-500"}`}>
+                Spanish contract, SMS, and email
+              </div>
+            </button>
+          </div>
+          {languageLabel ? (
+            <div
+              className={`mt-3 rounded-xl border px-3 py-2.5 text-sm font-medium ${
+                contractLanguage === "es"
+                  ? "border-amber-200 bg-amber-50 text-amber-950"
+                  : "border-sky-200 bg-sky-50 text-sky-950"
+              }`}
+            >
+              Sending the <strong>{languageLabel}</strong> contract. The client will get {languageLabel} SMS
+              {outbound.signingEmailEnabled ? " and email" : ""}.
+              {selectedTemplate?.name ? (
+                <div className="mt-1 text-xs font-normal opacity-80">{selectedTemplate.name}</div>
+              ) : null}
+            </div>
+          ) : selectedTemplate ? (
+            <p className="mt-3 text-xs text-slate-500">
+              This template name does not say English or Spanish. SMS will default to English.
+            </p>
+          ) : null}
+          {templateChoices.length > 1 ? (
+              <div className="mt-3">
+                <label className="text-xs font-medium text-slate-600">Template</label>
+                <select
+                  required
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  value={templateId}
+                  disabled={loadingTemplates}
+                  onChange={(e) => setTemplateId(e.target.value)}
+                >
+                  {templateChoices.map((t) => (
+                    <option key={t.id} value={String(t.id)}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
           <p className="mt-2 text-xs text-slate-500">
             Added or renamed a template in DocuSeal?{" "}
             <button
@@ -291,22 +369,6 @@ export default function SendContractPage() {
           />
         ) : null}
 
-        <div>
-          <label className="text-sm font-medium text-slate-900">SMS language</label>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Defaults to match the selected contract. Also used for email. You can change it if needed.
-          </p>
-          <div className="mt-2 flex gap-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="lang" checked={language === "en"} onChange={() => setLanguage("en")} />
-              English
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="lang" checked={language === "es"} onChange={() => setLanguage("es")} />
-              Spanish
-            </label>
-          </div>
-        </div>
         {outbound.signingSmsEnabled && outbound.signingEmailEnabled ? (
           <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
             <div className="text-sm font-semibold text-slate-900">Delivery</div>
@@ -331,7 +393,11 @@ export default function SendContractPage() {
           type="submit"
           className="w-full rounded-xl bg-[color:var(--accent)] px-4 py-3 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
         >
-          {busy ? "Sending…" : "Send contract"}
+          {busy
+            ? "Sending…"
+            : languageLabel
+              ? `Send ${languageLabel} contract`
+              : "Send contract"}
         </button>
       </form>
     </div>
