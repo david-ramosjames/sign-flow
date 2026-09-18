@@ -8,6 +8,7 @@ import { belongsToFirm } from "@/lib/firm-scope";
 import { selectableQuoPhoneNumbers } from "@/lib/firms";
 import { mergeOutboundDelivery } from "@/lib/outbound-delivery";
 import { normalizeSigningRequestForDisplay } from "@/lib/signing-request-active";
+import { processAutoCancelUnsignedRequests } from "@/server/auto-cancel-processor";
 import { processDueReminders } from "@/server/reminder-processor";
 import { createLeadAndSigningRequest } from "@/server/signing-workflow";
 import type { HipaaFormPrefill } from "@/types/models";
@@ -110,6 +111,11 @@ export async function GET() {
         await processDueReminders();
       } catch {
         /* non-fatal; cron or next dashboard load can retry */
+      }
+      try {
+        await processAutoCancelUnsignedRequests();
+      } catch {
+        /* non-fatal */
       }
     });
 

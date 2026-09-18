@@ -9,6 +9,7 @@ import { DEFAULT_COMMUNICATION_TEMPLATES } from "@/lib/messaging";
 import { DEFAULT_REMINDER_SCHEDULE, mergeReminderSchedule } from "@/lib/reminder-schedule";
 import { DEFAULT_COMPLETION_NOTIFICATIONS } from "@/lib/completion-notifications";
 import { DEFAULT_OUTBOUND_DELIVERY, mergeOutboundDelivery } from "@/lib/outbound-delivery";
+import { normalizeAutoCancelUnsignedAfterDays } from "@/lib/auto-cancel";
 import { getFirmDocusealConnection, getFirmQuoConnection, selectableQuoPhoneNumbers } from "@/lib/firms";
 
 const communicationTemplatesPatchSchema = z
@@ -92,6 +93,8 @@ const patchSchema = z.object({
   reminderSchedule: reminderSchedulePatchSchema,
   completionNotifications: completionNotificationsPatchSchema,
   outboundDelivery: outboundDeliveryPatchSchema,
+  /** `null` or `0` disables. */
+  autoCancelUnsignedAfterDays: z.number().int().min(0).max(365).nullable().optional(),
 });
 
 export async function GET() {
@@ -182,6 +185,7 @@ export async function PATCH(req: Request) {
       reminderSchedule: rsPatch,
       completionNotifications: cnPatch,
       outboundDelivery: odPatch,
+      autoCancelUnsignedAfterDays: autoCancelPatch,
       ...flagPatches
     } = parsed.data;
 
@@ -222,6 +226,11 @@ export async function PATCH(req: Request) {
         ...(existing.outboundDelivery ?? {}),
         ...odPatch,
       };
+    }
+    if (autoCancelPatch !== undefined) {
+      updated.autoCancelUnsignedAfterDays = normalizeAutoCancelUnsignedAfterDays(autoCancelPatch);
+      // Clear legacy field so the new setting is the single source of truth.
+      updated.autoCancelUnsignedContractsAfterDays = null;
     }
     await store.upsertAppSettings(updated);
     return NextResponse.json({

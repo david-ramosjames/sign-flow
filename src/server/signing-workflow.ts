@@ -294,11 +294,14 @@ export async function createLeadAndSigningRequest(
 export async function cancelSigningRequest(
   signingRequestId: string,
   actor: { sub: string },
+  opts?: { reason?: string },
 ): Promise<SigningRequest> {
   const store = getSignFlowStore();
   const req = await store.getSigningRequest(signingRequestId);
   if (!req) throw new Error("Not found");
-  if (req.status === "completed") throw new Error("Completed requests cannot be cancelled.");
+  if (req.status === "completed" || req.status === "signed") {
+    throw new Error("Completed requests cannot be cancelled.");
+  }
   if (isCancelledSigningRequest(req)) throw new Error("This signing request is already cancelled.");
 
   const t = nowIso();
@@ -315,7 +318,10 @@ export async function cancelSigningRequest(
     signingRequestId: req.id,
     leadId: req.leadId,
     type: "cancelled",
-    metadata: { actor: actor.sub },
+    metadata: {
+      actor: actor.sub,
+      ...(opts?.reason ? { reason: opts.reason } : {}),
+    },
   });
 
   return req;

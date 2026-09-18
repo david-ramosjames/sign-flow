@@ -15,6 +15,7 @@ import { templateForLanguage } from "@/lib/message-language";
 import { DEFAULT_COMPLETION_NOTIFICATIONS } from "@/lib/completion-notifications";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 import { DEFAULT_REMINDER_SCHEDULE, mergeReminderSchedule, buildDefaultSteps } from "@/lib/reminder-schedule";
+import { autoCancelUnsignedAfterDaysFromSettings } from "@/lib/auto-cancel";
 
 const PREVIEW = {
   clientName: "Jane Client",
@@ -157,6 +158,7 @@ export default function AdminMessagesPage() {
   const [completion, setCompletion] = useState<CompletionNotificationSettings>(DEFAULT_COMPLETION_NOTIFICATIONS);
   const [outbound, setOutbound] = useState<OutboundDeliverySettings>(DEFAULT_OUTBOUND_DELIVERY);
   const [rem, setRem] = useState<ReminderScheduleSettings>(DEFAULT_REMINDER_SCHEDULE);
+  const [autoCancelDays, setAutoCancelDays] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -175,6 +177,8 @@ export default function AdminMessagesPage() {
       setCompletion(mergeCompletion(j.item));
       setOutbound(mergeOutbound(j.item));
       setRem(mergeRem(j.item));
+      const days = autoCancelUnsignedAfterDaysFromSettings(j.item);
+      setAutoCancelDays(days == null ? "" : String(days));
       setError(null);
     });
   }, []);
@@ -240,6 +244,12 @@ export default function AdminMessagesPage() {
         communicationTemplates: comm,
         completionNotifications: completion,
         outboundDelivery: outbound,
+        autoCancelUnsignedAfterDays: (() => {
+          const trimmed = autoCancelDays.trim();
+          if (!trimmed) return null;
+          const n = Number(trimmed);
+          return Number.isFinite(n) ? Math.floor(n) : null;
+        })(),
         reminderSchedule: {
           ...rem,
           steps: generalSteps,
@@ -262,6 +272,8 @@ export default function AdminMessagesPage() {
       setCompletion(mergeCompletion(j.item));
       setOutbound(mergeOutbound(j.item));
       setRem(mergeRem(j.item));
+      const days = autoCancelUnsignedAfterDaysFromSettings(j.item);
+      setAutoCancelDays(days == null ? "" : String(days));
       setSavedAt(new Date().toISOString());
       setError(null);
     });
@@ -305,6 +317,27 @@ export default function AdminMessagesPage() {
                 Both channels are off — staff cannot send signing requests until at least one is enabled.
               </p>
             ) : null}
+
+            <div className="mt-5 border-t border-slate-100 pt-4">
+              <label className="block text-sm font-medium text-slate-900">
+                Auto-cancel unsigned requests after (days)
+              </label>
+              <p className="mt-0.5 text-xs text-slate-500">
+                If a signing request (contract, HIPAA, SAR, disbursement, or other) was sent and still has not been
+                signed after this many days, Sign Flow cancels it automatically (reminders stop). Leave blank to
+                disable. Checked about every 15 minutes.
+              </p>
+              <input
+                type="number"
+                min={1}
+                max={365}
+                inputMode="numeric"
+                placeholder="Off"
+                className="mt-2 w-40 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={autoCancelDays}
+                onChange={(e) => setAutoCancelDays(e.target.value)}
+              />
+            </div>
           </section>
 
           {/* ── SMS SECTION ── */}

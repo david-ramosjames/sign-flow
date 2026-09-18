@@ -312,4 +312,14 @@ export type AppSettings = {
   completionNotifications?: CompletionNotificationSettings | null;
   /** Admin toggles for SMS/email when sending signing requests to clients. */
   outboundDelivery?: OutboundDeliverySettings | null;
+  /**
+   * Auto-cancel unsigned signing requests this many days after `sentAt`.
+   * Applies to contracts, HIPAA, SAR, disbursement, and other sends.
+   * `null` / `0` / omitted = disabled.
+   */
+  autoCancelUnsignedAfterDays?: number | null;
+  /**
+   * @deprecated Use `autoCancelUnsignedAfterDays`. Kept so older Firestore docs still load.
+   */
+  autoCancelUnsignedContractsAfterDays?: number | null;
 };

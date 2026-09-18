@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { processAutoCancelUnsignedRequests } from "@/server/auto-cancel-processor";
 import { processDueReminders } from "@/server/reminder-processor";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ function isCronAuthorized(req: Request): boolean {
 }
 
 /**
- * Reminder sweep — runs on Vercel Cron (every 15 minutes; see vercel.json).
+ * Reminder + auto-cancel sweep — runs on Vercel Cron (every 15 minutes; see vercel.json).
  * Due reminders are also processed when staff load the dashboard as a backup.
  */
 export async function GET(req: Request) {
@@ -23,6 +24,14 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { due, processed, deferred, errors } = await processDueReminders();
-  return NextResponse.json({ ok: true, due, processed, deferred, errors });
+  const reminders = await processDueReminders();
+  const autoCancel = await processAutoCancelUnsignedRequests();
+  return NextResponse.json({
+    ok: true,
+    due: reminders.due,
+    processed: reminders.processed,
+    deferred: reminders.deferred,
+    errors: reminders.errors,
+    autoCancel,
+  });
 }
