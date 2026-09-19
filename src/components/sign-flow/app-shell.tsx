@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState, startTransition } from "react";
+import { redirectToLoginIfUnauthorized } from "@/lib/auth/redirect-to-login";
 import { signOutFirebaseClient } from "@/lib/firebase/client";
 
 const nav = [
@@ -18,6 +20,7 @@ type SessionUser = { name: string; email?: string };
 type FirmOption = { id: string; name: string; logoUrl: string | null };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
@@ -43,6 +46,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           setLogoFailed(false);
         });
       } else {
+        const onProtected =
+          pathname.startsWith("/dashboard") || pathname.startsWith("/admin");
+        if (onProtected && redirectToLoginIfUnauthorized(res.status, pathname)) {
+          return;
+        }
         startTransition(() => setUser(null));
       }
       startTransition(() => setAuthChecked(true));
@@ -50,7 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [pathname]);
 
   const logoSrc = firm?.logoUrl?.trim() || "/ramosjames-new-logo-white-revised-f.webp";
   const firmName = firm?.name || "Ramos James Law";

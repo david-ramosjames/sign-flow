@@ -1,3 +1,6 @@
+/** Default staff domain when `SIGNFLOW_ALLOWED_GOOGLE_EMAILS` is unset/empty. */
+const DEFAULT_ALLOWED_DOMAINS = ["ramosjames.com"];
+
 /** Parse comma-separated allowlist entries (emails and/or domains). */
 export function parseEmailAllowlist(raw: string | undefined): string[] {
   if (!raw?.trim()) return [];
@@ -27,9 +30,18 @@ export function emailMatchesAllowlist(email: string, entries: string[]): boolean
   return false;
 }
 
-/** If `SIGNFLOW_ALLOWED_GOOGLE_EMAILS` is set, email must match an entry (exact or domain). */
+/**
+ * Staff Google accounts allowed to create a Sign Flow session.
+ * - Unset / empty → any `@ramosjames.com` address
+ * - `*` → any Google account (local/dev only)
+ * - Otherwise → comma-separated emails and/or domains
+ */
 export function isStaffEmailAllowed(email: string): boolean {
-  const entries = parseEmailAllowlist(process.env.SIGNFLOW_ALLOWED_GOOGLE_EMAILS);
-  if (entries.length === 0) return true;
+  const raw = process.env.SIGNFLOW_ALLOWED_GOOGLE_EMAILS?.trim();
+  if (raw === "*") return true;
+  const entries = parseEmailAllowlist(raw);
+  if (entries.length === 0) {
+    return emailMatchesAllowlist(email, DEFAULT_ALLOWED_DOMAINS);
+  }
   return emailMatchesAllowlist(email, entries);
 }

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { getSessionCookieName } from "@/lib/auth/session";
+import { getSessionCookieName, sessionCookieClearOptions } from "@/lib/auth/session";
 import { FIRM_COOKIE } from "@/lib/firm-scope";
 
 export async function POST() {
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(getSessionCookieName(), "", { httpOnly: true, path: "/", maxAge: 0 });
-  res.cookies.set(FIRM_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+  const clear = sessionCookieClearOptions();
+  res.cookies.set(getSessionCookieName(), "", clear);
+  res.cookies.set(FIRM_COOKIE, "", clear);
   return res;
 }

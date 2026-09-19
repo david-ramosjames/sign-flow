@@ -6,6 +6,7 @@ import type { Lead, OutboundDeliverySettings, SigningRequest, SigningStatus } fr
 import { formatSignflowShortDateTime, toSignflowYmd } from "@/lib/signflow-timezone";
 import { DEFAULT_OUTBOUND_DELIVERY } from "@/lib/outbound-delivery";
 import { postSigningResend } from "@/lib/post-signing-resend";
+import { redirectToLoginIfUnauthorized } from "@/lib/auth/redirect-to-login";
 import { StatusChip } from "@/components/sign-flow/status-chip";
 
 type ApiList = {
@@ -70,6 +71,7 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     const res = await fetch("/api/signing-requests", { credentials: "include" });
     if (!res.ok) {
+      if (redirectToLoginIfUnauthorized(res.status)) return;
       let msg = "Could not load signing requests";
       try {
         const j = (await res.json()) as { error?: string; hint?: string };

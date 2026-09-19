@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
-import { getSessionCookieName } from "@/lib/auth/session";
+import { getSessionCookieName, sessionCookieClearOptions } from "@/lib/auth/session";
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -33,7 +33,7 @@ export async function middleware(req: NextRequest) {
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
     const res = NextResponse.redirect(url);
-    res.cookies.set(sessionCookie, "", { httpOnly: true, path: "/", maxAge: 0 });
+    res.cookies.set(sessionCookie, "", sessionCookieClearOptions());
     return res;
   }
 }

@@ -4,7 +4,7 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirebaseAdminApp } from "@/lib/firebase/admin-app";
 import { emailIsFirmMember } from "@/lib/firms";
 import { isStaffEmailAllowed } from "@/lib/auth/email-allowlist";
-import { signSessionToken, getSessionCookieName } from "@/lib/auth/session";
+import { signSessionToken, getSessionCookieName, sessionCookieSetOptions } from "@/lib/auth/session";
 
 const bodySchema = z.object({
   idToken: z.string().min(1),
@@ -42,13 +42,7 @@ export async function POST(req: Request) {
   const token = await signSessionToken({ sub: `firebase:${decoded.uid}`, name, email }, secret);
 
   const res = NextResponse.json({ ok: true });
-  const secure = process.env.NODE_ENV === "production";
-  res.cookies.set(getSessionCookieName(), token, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    secure,
-    maxAge: 60 * 60 * 12,
-  });
+  res.cookies.set(getSessionCookieName(), token, sessionCookieSetOptions());
+  res.headers.set("Cache-Control", "no-store");
   return res;
 }

@@ -6,6 +6,27 @@ export function getSessionCookieName() {
   return COOKIE;
 }
 
+/** Options used when setting the session cookie — clear must match (esp. `secure`). */
+export function sessionCookieSetOptions(maxAgeSeconds = 60 * 60 * 12) {
+  return {
+    httpOnly: true as const,
+    sameSite: "lax" as const,
+    path: "/",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: maxAgeSeconds,
+  };
+}
+
+export function sessionCookieClearOptions() {
+  return {
+    httpOnly: true as const,
+    sameSite: "lax" as const,
+    path: "/",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 0,
+  };
+}
+
 export async function signSessionToken(
   payload: { sub: string; name: string; email?: string },
   secret: string,

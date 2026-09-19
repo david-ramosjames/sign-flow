@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, startTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signInWithGooglePopup } from "@/lib/firebase/client";
+import { signInWithGooglePopup, signOutFirebaseClient } from "@/lib/firebase/client";
 
 function LoginForm() {
   const router = useRouter();
@@ -16,10 +16,11 @@ function LoginForm() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const res = await fetch("/api/auth/me", { credentials: "include" });
+      const res = await fetch("/api/auth/me", { credentials: "include", cache: "no-store" });
       if (cancelled) return;
       if (res.ok) {
-        router.replace(next);
+        // Hard navigation so middleware + cookies always apply.
+        window.location.replace(next);
         return;
       }
       startTransition(() => setChecking(false));
@@ -63,7 +64,10 @@ function LoginForm() {
           </div>
         </div>
 
-        <p className="mt-4 text-sm text-slate-600">Ramos James Law accounts only.</p>
+        <p className="mt-4 text-sm text-slate-600">
+          Use your <strong>@ramosjames.com</strong> Google account. After an app update you may need to sign in
+          again.
+        </p>
 
         {error ? <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">{error}</div> : null}
 
@@ -76,20 +80,41 @@ function LoginForm() {
               setBusy(true);
               setError(null);
               try {
+                // Clear any stale Sign Flow / Firebase session so a fresh cookie can be set.
+                await signOutFirebaseClient();
+                await fetch("/api/auth/logout", { method: "POST", credentials: "include", cache: "no-store" });
+
                 const idToken = await signInWithGooglePopup();
                 const res = await fetch("/api/auth/session", {
                   method: "POST",
                   headers: { "content-type": "application/json" },
                   credentials: "include",
+                  cache: "no-store",
                   body: JSON.stringify({ idToken }),
                 });
                 if (!res.ok) {
                   const j = (await res.json().catch(() => null)) as { error?: string } | null;
-                  setError(j?.error ?? "Sign-in failed");
+                  setError(
+                    j?.error ??
+                      (res.status === 403
+                        ? "This Google account is not allowed to use Sign Flow. Ask an admin to add your email."
+                        : "Sign-in failed"),
+                  );
                   setBusy(false);
                   return;
                 }
-                router.replace(next);
+
+                // Confirm the session cookie actually stuck before leaving login.
+                const me = await fetch("/api/auth/me", { credentials: "include", cache: "no-store" });
+                if (!me.ok) {
+                  setError(
+                    "Google sign-in worked, but Sign Flow could not save your session cookie. Try Chrome/Edge, allow cookies for this site, or use a private window without extensions.",
+                  );
+                  setBusy(false);
+                  return;
+                }
+
+                window.location.replace(next);
               } catch (e) {
                 const code = typeof e === "object" && e && "code" in e ? String((e as { code?: string }).code) : "";
                 if (code === "auth/popup-closed-by-user") {
