@@ -336,7 +336,7 @@ export default function SendContractPage() {
             {outbound.signingSmsEnabled ? (
               <div>
                 <label className="text-sm font-medium text-slate-900">Phone</label>
-                <p className="mt-0.5 text-xs text-slate-500">Include country code (e.g. +1 for US).</p>
+                <p className="mt-0.5 text-xs text-slate-500">Include country code (e.g. +1 for US). Primary delivery.</p>
                 <input
                   className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                   value={phone}
@@ -348,6 +348,7 @@ export default function SendContractPage() {
             {outbound.signingEmailEnabled ? (
               <div>
                 <label className="text-sm font-medium text-slate-900">Email</label>
+                <p className="mt-0.5 text-xs text-slate-500">Optional — check Email under Delivery to also send by email.</p>
                 <input
                   className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                   type="email"
@@ -372,13 +373,14 @@ export default function SendContractPage() {
         {outbound.signingSmsEnabled && outbound.signingEmailEnabled ? (
           <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
             <div className="text-sm font-semibold text-slate-900">Delivery</div>
+            <p className="mt-1 text-xs text-slate-500">SMS is the default. Add email when the client prefers it or as a backup.</p>
             <label className="mt-3 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
-              SMS
+              SMS (recommended)
             </label>
             <label className="mt-2 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
-              Email
+              Email (optional)
             </label>
           </div>
         ) : null}

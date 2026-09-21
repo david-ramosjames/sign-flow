@@ -45,15 +45,31 @@ export type ParsedWorkspaceMailEnv =
   | { ok: true; clientEmail: string; privateKeyPem: string; sendAsEmail: string }
   | { ok: false; error: string };
 
-export function parseWorkspaceMailEnv(): ParsedWorkspaceMailEnv {
+export type GmailSendPurpose = "signing" | "completion";
+
+/** Resolve which Workspace mailbox to impersonate for this email purpose. */
+export function resolveGmailSendAsEmail(purpose: GmailSendPurpose = "completion"): string | null {
+  const signing = process.env.GMAIL_SIGNING_SEND_AS_EMAIL?.trim();
+  const completion =
+    process.env.GMAIL_COMPLETION_SEND_AS_EMAIL?.trim() || process.env.GMAIL_SEND_AS_EMAIL?.trim();
+  const fallback = process.env.GMAIL_SEND_AS_EMAIL?.trim();
+  if (purpose === "signing") return signing || fallback || null;
+  return completion || fallback || null;
+}
+
+export function parseWorkspaceMailEnv(purpose: GmailSendPurpose = "completion"): ParsedWorkspaceMailEnv {
   const rawIss = process.env.GMAIL_SERVICE_ACCOUNT_EMAIL;
-  const rawSub = process.env.GMAIL_SEND_AS_EMAIL;
+  const rawSub = resolveGmailSendAsEmail(purpose);
   const privateKeyPem = pemPrivateKey();
+  const sendAsLabel =
+    purpose === "signing"
+      ? "GMAIL_SIGNING_SEND_AS_EMAIL (or GMAIL_SEND_AS_EMAIL)"
+      : "GMAIL_COMPLETION_SEND_AS_EMAIL / GMAIL_SEND_AS_EMAIL";
+
   if (!rawIss?.trim() || !privateKeyPem || !rawSub?.trim()) {
     return {
       ok: false,
-      error:
-        "Missing GMAIL_SERVICE_ACCOUNT_EMAIL, GMAIL_SERVICE_ACCOUNT_PRIVATE_KEY, or GMAIL_SEND_AS_EMAIL (these are not the Firebase Admin variables).",
+      error: `Missing GMAIL_SERVICE_ACCOUNT_EMAIL, GMAIL_SERVICE_ACCOUNT_PRIVATE_KEY, or ${sendAsLabel} (these are not the Firebase Admin variables).`,
     };
   }
 
@@ -61,24 +77,22 @@ export function parseWorkspaceMailEnv(): ParsedWorkspaceMailEnv {
   const sendAsEmail = stripOuterQuotes(rawSub).trim().toLowerCase();
 
   if (/\s/.test(stripOuterQuotes(rawSub).trim())) {
-    return { ok: false, error: "GMAIL_SEND_AS_EMAIL must be a single email with no spaces." };
+    return { ok: false, error: `${sendAsLabel} must be a single email with no spaces.` };
   }
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(sendAsEmail)) {
-    return { ok: false, error: "GMAIL_SEND_AS_EMAIL does not look like a valid email address." };
+    return { ok: false, error: `${sendAsLabel} does not look like a valid email address.` };
   }
   if (sendAsEmail.endsWith("@gmail.com")) {
     return {
       ok: false,
-      error:
-        "GMAIL_SEND_AS_EMAIL must be a Google Workspace user in your company domain (not a personal @gmail.com address).",
+      error: `${sendAsLabel} must be a Google Workspace user in your company domain (not a personal @gmail.com address).`,
     };
   }
 
   if (!isServiceAccountClientEmail(clientEmail)) {
     return {
       ok: false,
-      error:
-        `GMAIL_SERVICE_ACCOUNT_EMAIL must be the service account **email** from the JSON key (*@*.iam.gserviceaccount.com). It must not be the numeric Client ID, OAuth client id (*.apps.googleusercontent.com), or your own mailbox. Got: "${clientEmail.slice(0, 56)}${clientEmail.length > 56 ? "…" : ""}".`,
+      error: `GMAIL_SERVICE_ACCOUNT_EMAIL must be the service account **email** from the JSON key (*@*.iam.gserviceaccount.com). It must not be the numeric Client ID, OAuth client id (*.apps.googleusercontent.com), or your own mailbox. Got: "${clientEmail.slice(0, 56)}${clientEmail.length > 56 ? "…" : ""}".`,
     };
   }
 
@@ -169,6 +183,7 @@ export async function sendGmailViaWorkspaceDelegation(input: {
   subject: string;
   textBody: string;
   htmlBody?: string;
+  purpose?: GmailSendPurpose;
 }): Promise<boolean> {
   const r = await sendGmailViaWorkspaceDelegationDetailed(input);
   return r.ok;
@@ -180,8 +195,10 @@ export async function sendGmailViaWorkspaceDelegationDetailed(input: {
   textBody: string;
   htmlBody?: string;
   attachments?: EmailAttachment[];
+  purpose?: GmailSendPurpose;
 }): Promise<GmailDelegationSendResult> {
-  const parsed = parseWorkspaceMailEnv();
+  const purpose = input.purpose ?? "completion";
+  const parsed = parseWorkspaceMailEnv(purpose);
   if (!parsed.ok) return { ok: false, error: parsed.error };
 
   const tokenR = await mintDelegatedAccessToken(parsed);
@@ -212,12 +229,12 @@ export async function sendGmailViaWorkspaceDelegationDetailed(input: {
     }
     return {
       ok: false,
-      error: `Gmail API messages/send ${res.status}: ${msg}. From address must match GMAIL_SEND_AS_EMAIL (${parsed.sendAsEmail}).`,
+      error: `Gmail API messages/send ${res.status}: ${msg}. From address must match the impersonated mailbox (${parsed.sendAsEmail}).`,
     };
   }
   return { ok: true };
 }
 
-export function isGmailWorkspaceDelegationConfigured(): boolean {
-  return parseWorkspaceMailEnv().ok;
+export function isGmailWorkspaceDelegationConfigured(purpose: GmailSendPurpose = "completion"): boolean {
+  return parseWorkspaceMailEnv(purpose).ok;
 }

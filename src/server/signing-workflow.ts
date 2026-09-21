@@ -253,7 +253,13 @@ export async function createLeadAndSigningRequest(
       language,
       formKind === "contract",
     );
-    const mail = await sendTransactionalEmail({ to: lead.email, subject, textBody: text, htmlBody: html });
+    const mail = await sendTransactionalEmail({
+      to: lead.email,
+      subject,
+      textBody: text,
+      htmlBody: html,
+      purpose: "signing",
+    });
     if (!mail.ok) throw new Error(mail.error);
     signingRequest.sentViaEmail = true;
     await appendSigningEvent({ signingRequestId: reqId, leadId, type: "email_sent", metadata: {} });
@@ -476,7 +482,13 @@ export async function resendSigningNotifications(
       req.language,
       req.formKind === "contract",
     );
-    const mail = await sendTransactionalEmail({ to: req.email, subject, textBody: text, htmlBody: html });
+    const mail = await sendTransactionalEmail({
+      to: req.email,
+      subject,
+      textBody: text,
+      htmlBody: html,
+      purpose: "signing",
+    });
     if (!mail.ok) throw new Error(mail.error);
     await appendSigningEvent({ signingRequestId, leadId: req.leadId, type: "email_sent", metadata: { resend: true } });
   }
@@ -701,6 +713,7 @@ export async function applyDocusealCompletionToRequest(input: {
           subject,
           textBody: text,
           attachments: attachments.length ? attachments : undefined,
+          purpose: "completion",
         });
         if (!mail.ok) throw new Error(mail.error);
         sentTo.push(email);
@@ -866,7 +879,13 @@ export async function runReminderForRequest(
       req.language,
       req.formKind === "contract",
     );
-    const mail = await sendTransactionalEmail({ to: req.email, subject, textBody: text, htmlBody: html });
+    const mail = await sendTransactionalEmail({
+      to: req.email,
+      subject,
+      textBody: text,
+      htmlBody: html,
+      purpose: "signing",
+    });
     if (!mail.ok) {
       await appendSigningEvent({
         signingRequestId: req.id,

@@ -1,6 +1,7 @@
 import {
   isGmailWorkspaceDelegationConfigured,
   sendGmailViaWorkspaceDelegationDetailed,
+  type GmailSendPurpose,
 } from "@/services/gmail-workspace-dwd";
 import { buildRfc822Message, type EmailAttachment } from "@/lib/mime-rfc822";
 export type { EmailAttachment };
@@ -11,6 +12,11 @@ export type SendTransactionalEmailInput = {
   textBody: string;
   htmlBody?: string;
   attachments?: EmailAttachment[];
+  /**
+   * `signing` = client-facing (signing link / reminders) — uses `GMAIL_SIGNING_SEND_AS_EMAIL` when set.
+   * `completion` = internal team notifications — uses `GMAIL_COMPLETION_SEND_AS_EMAIL` / `GMAIL_SEND_AS_EMAIL`.
+   */
+  purpose?: GmailSendPurpose;
 };
 
 function normalizeRecipients(to: string | string[]): string[] {
@@ -19,7 +25,10 @@ function normalizeRecipients(to: string | string[]): string[] {
 
 async function sendSendGrid(input: SendTransactionalEmailInput): Promise<boolean> {
   const key = process.env.SENDGRID_API_KEY?.trim();
-  const from = process.env.SENDGRID_FROM_EMAIL?.trim();
+  const fromSigning = process.env.SENDGRID_SIGNING_FROM_EMAIL?.trim();
+  const fromDefault = process.env.SENDGRID_FROM_EMAIL?.trim();
+  const from =
+    input.purpose === "signing" ? fromSigning || fromDefault : fromDefault || fromSigning;
   const recipients = normalizeRecipients(input.to);
   if (!key || !from || recipients.length === 0) return false;
   const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
@@ -73,7 +82,10 @@ async function refreshGoogleAccessToken(): Promise<string | null> {
 
 /** Legacy: user OAuth refresh token (not domain-wide delegation). */
 async function sendGmailUserOAuth(input: SendTransactionalEmailInput): Promise<boolean> {
-  const from = process.env.GOOGLE_EMAIL_FROM?.trim();
+  const fromSigning = process.env.GOOGLE_SIGNING_EMAIL_FROM?.trim();
+  const fromDefault = process.env.GOOGLE_EMAIL_FROM?.trim();
+  const from =
+    input.purpose === "signing" ? fromSigning || fromDefault : fromDefault || fromSigning;
   const access = await refreshGoogleAccessToken();
   const recipients = normalizeRecipients(input.to);
   if (!from || !access || recipients.length === 0) return false;
@@ -96,33 +108,37 @@ async function sendGmailUserOAuth(input: SendTransactionalEmailInput): Promise<b
 
 /**
  * Sends transactional email. Order of attempt:
- * 1. Google Workspace domain-wide delegation (service account → `GMAIL_SEND_AS_EMAIL`)
- * 2. Gmail API with user refresh token (`GOOGLE_REFRESH_TOKEN` + `GOOGLE_EMAIL_FROM`)
+ * 1. Google Workspace domain-wide delegation (service account → purpose-specific send-as)
+ * 2. Gmail API with user refresh token
  * 3. SendGrid
  */
-export async function sendTransactionalEmail(input: SendTransactionalEmailInput): Promise<SendTransactionalEmailResult> {
+export async function sendTransactionalEmail(
+  input: SendTransactionalEmailInput,
+): Promise<SendTransactionalEmailResult> {
+  const purpose: GmailSendPurpose = input.purpose ?? "completion";
   const tried: string[] = [];
 
-  if (isGmailWorkspaceDelegationConfigured()) {
-    const dwd = await sendGmailViaWorkspaceDelegationDetailed(input);
+  if (isGmailWorkspaceDelegationConfigured(purpose)) {
+    const dwd = await sendGmailViaWorkspaceDelegationDetailed({ ...input, purpose });
     if (dwd.ok) return { ok: true };
     tried.push(dwd.error);
   } else if (
     process.env.GMAIL_SERVICE_ACCOUNT_EMAIL?.trim() ||
     process.env.GMAIL_SERVICE_ACCOUNT_PRIVATE_KEY?.trim() ||
-    process.env.GMAIL_SEND_AS_EMAIL?.trim()
+    process.env.GMAIL_SEND_AS_EMAIL?.trim() ||
+    process.env.GMAIL_SIGNING_SEND_AS_EMAIL?.trim()
   ) {
     tried.push(
       "Workspace mail env vars look partially set but isGmailWorkspaceDelegationConfigured() is false — usually a missing/empty GMAIL_SERVICE_ACCOUNT_PRIVATE_KEY or PEM parsing issue.",
     );
   }
 
-  if (await sendGmailUserOAuth(input)) return { ok: true };
-  if (await sendSendGrid(input)) return { ok: true };
+  if (await sendGmailUserOAuth({ ...input, purpose })) return { ok: true };
+  if (await sendSendGrid({ ...input, purpose })) return { ok: true };
 
   const tail =
     tried.length > 0
       ? tried.join(" ")
-      : "No email provider configured. For Workspace delegation set GMAIL_SERVICE_ACCOUNT_EMAIL, GMAIL_SERVICE_ACCOUNT_PRIVATE_KEY, GMAIL_SEND_AS_EMAIL (separate from Firebase Admin), plus domain-wide delegation Client ID with gmail.send scope.";
+      : "No email provider configured. For Workspace delegation set GMAIL_SERVICE_ACCOUNT_EMAIL, GMAIL_SERVICE_ACCOUNT_PRIVATE_KEY, and GMAIL_SIGNING_SEND_AS_EMAIL (clients) / GMAIL_SEND_AS_EMAIL (team), plus domain-wide delegation Client ID with gmail.send scope.";
   return { ok: false, error: tail };
 }

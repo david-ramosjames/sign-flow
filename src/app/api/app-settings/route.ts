@@ -4,7 +4,8 @@ import { getSignFlowStore } from "@/lib/db";
 import { requireFirmSession } from "@/lib/auth/firm-session";
 import { nowIso } from "@/lib/time";
 import type { AppSettings } from "@/types/models";
-import { isGmailWorkspaceDelegationConfigured } from "@/services/gmail-workspace-dwd";
+import { isGmailWorkspaceDelegationConfigured, resolveGmailSendAsEmail } from "@/services/gmail-workspace-dwd";
+import { isSlackBotConfigured } from "@/lib/slack/config";
 import { DEFAULT_COMMUNICATION_TEMPLATES } from "@/lib/messaging";
 import { DEFAULT_REMINDER_SCHEDULE, mergeReminderSchedule } from "@/lib/reminder-schedule";
 import { DEFAULT_COMPLETION_NOTIFICATIONS } from "@/lib/completion-notifications";
@@ -147,7 +148,9 @@ export async function GET() {
       hasSignFlowSessionSecret: Boolean(process.env.SIGNFLOW_SESSION_SECRET),
       hasQuoApiKey: Boolean(quo?.apiKey?.trim() || process.env.QUO_API_KEY),
       hasQuoFromNumber,
-      hasGmailWorkspaceDelegation: isGmailWorkspaceDelegationConfigured(),
+      hasGmailWorkspaceDelegation: isGmailWorkspaceDelegationConfigured("completion") || isGmailWorkspaceDelegationConfigured("signing"),
+      hasGmailSigningSendAs: Boolean(resolveGmailSendAsEmail("signing")),
+      hasSlackBot: isSlackBotConfigured(),
       hasSendgrid: Boolean(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL),
       hasGmailUserOAuth: Boolean(process.env.GOOGLE_REFRESH_TOKEN && process.env.GOOGLE_EMAIL_FROM),
       hasDropboxToken: Boolean(process.env.DROPBOX_ACCESS_TOKEN),

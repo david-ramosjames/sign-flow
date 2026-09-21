@@ -62,9 +62,10 @@ export default function AdminSettingsPage() {
           <code>DOCUSEAL_API_KEY</code>, optional <code>DOCUSEAL_WEBHOOK_SECRET</code>, <code>DOCUSEAL_ADMIN_BASE_URL</code>.
           Quo SMS: <code>QUO_API_KEY</code>, <code>QUO_FROM_NUMBER</code> or <code>QUO_PHONE_NUMBER_ID</code> (optional{" "}
           <code>QUO_USER_ID</code>). Email:
-          Workspace delegation (<code>GMAIL_SERVICE_ACCOUNT_*</code>, <code>GMAIL_SEND_AS_EMAIL</code>), or SendGrid, or
-          Gmail user OAuth. Dropbox: <code>DROPBOX_ACCESS_TOKEN</code>. Cron:{" "}
-          <code>CRON_SECRET</code>.
+          Workspace delegation (<code>GMAIL_SERVICE_ACCOUNT_*</code>, <code>GMAIL_SIGNING_SEND_AS_EMAIL</code> for
+          clients, <code>GMAIL_SEND_AS_EMAIL</code> for team), or SendGrid, or Gmail user OAuth. Slack bot:{" "}
+          <code>SLACK_BOT_TOKEN</code>, <code>SLACK_SIGNING_SECRET</code>. Dropbox: <code>DROPBOX_ACCESS_TOKEN</code>.
+          Cron: <code>CRON_SECRET</code>.
         </div>
       </div>
 

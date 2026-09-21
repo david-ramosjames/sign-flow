@@ -288,13 +288,14 @@ export default function SendOneTimeFormPage() {
         {outbound.signingSmsEnabled && outbound.signingEmailEnabled ? (
           <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
             <div className="text-sm font-semibold text-slate-900">Delivery</div>
+            <p className="mt-1 text-xs text-slate-500">SMS is the default. Add email when the client prefers it or as a backup.</p>
             <label className="mt-3 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
-              SMS
+              SMS (recommended)
             </label>
             <label className="mt-2 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
-              Email
+              Email (optional)
             </label>
           </div>
         ) : null}
