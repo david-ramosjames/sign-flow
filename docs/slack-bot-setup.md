@@ -24,13 +24,28 @@ Install the app to the workspace, then copy the **Bot User OAuth Token** (`xoxb-
 
 ## 4. Request URLs (use your production origin)
 
-Replace `https://YOUR_APP` with your Sign Flow URL (e.g. `https://sign.ramosjames.com`).
+Replace `https://YOUR_APP` with your Sign Flow URL (e.g. `https://rjl-signflow.vercel.app`).
 
-| Slack feature | URL |
-|---|---|
-| **Slash Commands** → Create `/send-contract` | `https://YOUR_APP/api/slack/commands` |
-| **Interactivity & Shortcuts** → Request URL | `https://YOUR_APP/api/slack/interactions` |
-| **Event Subscriptions** → Request URL | `https://YOUR_APP/api/slack/events` |
+| Slack feature | URL | Notes |
+|---|---|---|
+| **Slash Commands** → Create `/send-contract` | `https://YOUR_APP/api/slack/commands` | Not for Event Subscriptions |
+| **Interactivity & Shortcuts** → Request URL | `https://YOUR_APP/api/slack/interactions` | Modal submit + button |
+| **Event Subscriptions** → Request URL | `https://YOUR_APP/api/slack/events` | Must be `/events` (handles Slack’s `challenge`) |
+
+**Common mistake:** Putting `/api/slack/commands` under Event Subscriptions fails URL verification. Use **`/api/slack/events`** there.
+
+**Turn Socket Mode OFF.** Sign Flow runs on Vercel (HTTP callbacks). Socket Mode hides the Request URL fields and won’t work with this setup.
+
+1. **Socket Mode** → toggle **Off** (and Save)
+2. **Interactivity & Shortcuts** → On → Request URL = `https://YOUR_APP/api/slack/interactions`
+3. **Event Subscriptions** → On → Request URL = `https://YOUR_APP/api/slack/events`
+4. **Slash Commands** → `/send-contract` → `https://YOUR_APP/api/slack/commands`
+
+Before verifying URLs:
+
+1. Set `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` in Vercel (Production)
+2. Redeploy so those env vars are live
+3. Paste the URLs above and Retry / Verify
 
 Event Subscriptions → Subscribe to bot events:
 

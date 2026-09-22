@@ -34,10 +34,11 @@ function wantsSendContract(text: string): boolean {
  * Slack Events API — app_mention opens the contract modal when the message asks to send a contract.
  */
 export async function POST(req: Request) {
-  if (!isSlackBotConfigured()) {
-    return NextResponse.json({ error: "Slack bot is not configured" }, { status: 503 });
+  const secret = slackSigningSecret();
+  if (!secret) {
+    return NextResponse.json({ error: "SLACK_SIGNING_SECRET is not configured" }, { status: 503 });
   }
-  const secret = slackSigningSecret()!;
+
   const rawBody = await req.text();
   const ok = verifySlackRequest({
     signingSecret: secret,
@@ -54,11 +55,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  // Slack Event Subscriptions URL verification (must return the challenge as plain text).
   if (payload.type === "url_verification" && payload.challenge) {
     return new NextResponse(payload.challenge, {
       status: 200,
       headers: { "content-type": "text/plain" },
     });
+  }
+
+  if (!isSlackBotConfigured()) {
+    return NextResponse.json({ error: "Slack bot is not fully configured" }, { status: 503 });
   }
 
   const event = payload.event;
