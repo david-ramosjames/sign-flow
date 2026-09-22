@@ -109,7 +109,7 @@ export async function buildContractModalView(meta: SlackContractModalMeta) {
         type: "input",
         block_id: "email",
         optional: true,
-        label: { type: "plain_text", text: "Email (optional)" },
+        label: { type: "plain_text", text: "Email" },
         element: {
           type: "email_text_input",
           action_id: "value",

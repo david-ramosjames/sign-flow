@@ -103,9 +103,7 @@ export async function POST(req: Request) {
     if (!result.ok) {
       return NextResponse.json({
         response_action: "errors",
-        errors: {
-          client_name: result.error,
-        },
+        errors: result.errors,
       });
     }
 

@@ -10,11 +10,27 @@ import { appendSigningEvent } from "@/services/signing-events";
 import { createLeadAndSigningRequest } from "@/server/signing-workflow";
 
 type SlackViewState = {
-  values?: Record<string, Record<string, { value?: string | null; selected_option?: { value?: string }; selected_options?: { value?: string }[] }>>;
+  values?: Record<
+    string,
+    Record<
+      string,
+      {
+        value?: string | null;
+        selected_date?: string | null;
+        selected_option?: { value?: string };
+        selected_options?: { value?: string }[];
+      }
+    >
+  >;
 };
 
 function fieldValue(state: SlackViewState, blockId: string, actionId = "value"): string {
   return state.values?.[blockId]?.[actionId]?.value?.trim() ?? "";
+}
+
+function selectedDate(state: SlackViewState, blockId: string, actionId = "value"): string {
+  // Slack datepicker posts selected_date (YYYY-MM-DD), not value.
+  return state.values?.[blockId]?.[actionId]?.selected_date?.trim() ?? "";
 }
 
 function selectedOption(state: SlackViewState, blockId: string, actionId: string): string {
@@ -29,29 +45,37 @@ function checkboxYes(state: SlackViewState, blockId: string): boolean {
 export async function handleContractModalSubmission(opts: {
   meta: SlackContractModalMeta;
   state: SlackViewState;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<{ ok: true } | { ok: false; errors: Record<string, string> }> {
   const { meta, state } = opts;
   const templateIdRaw = selectedOption(state, "template", "template_id");
   const templateId = Number(templateIdRaw);
   const clientName = fieldValue(state, "client_name");
   const phone = fieldValue(state, "phone");
   const email = fieldValue(state, "email") || null;
-  const dateOfLoss = fieldValue(state, "date_of_loss") || null;
+  const dateOfLoss = selectedDate(state, "date_of_loss") || null;
   const alsoEmail = checkboxYes(state, "also_email");
 
   if (!Number.isFinite(templateId) || templateId <= 0) {
-    return { ok: false, error: "Select a contract template." };
+    return { ok: false, errors: { template: "Select a contract template." } };
   }
-  if (!clientName) return { ok: false, error: "Client name is required." };
-  if (!phone) return { ok: false, error: "Phone is required to text the signing link." };
+  if (!clientName) return { ok: false, errors: { client_name: "Client name is required." } };
+  if (!phone) {
+    return { ok: false, errors: { phone: "Phone is required to text the signing link." } };
+  }
   if (alsoEmail && !email) {
-    return { ok: false, error: "Enter an email address, or uncheck “Also send email.”" };
+    return {
+      ok: false,
+      errors: { email: "Enter an email address, or uncheck “Also send email.”" },
+    };
   }
 
   const docuseal = await getFirmDocusealConnection(meta.firmId);
   const template = await getTemplate(templateId, docuseal);
   if (templateRequiresDateOfLoss(template.name) && !dateOfLoss) {
-    return { ok: false, error: "Date of loss is required for this contract template." };
+    return {
+      ok: false,
+      errors: { date_of_loss: "Date of loss is required for this contract template." },
+    };
   }
 
   const language = languageForTemplateName(template.name);
@@ -117,6 +141,6 @@ export async function handleContractModalSubmission(opts: {
       user: meta.userId,
       text: `Could not send contract: ${msg}`,
     }).catch(() => undefined);
-    return { ok: false, error: msg };
+    return { ok: false, errors: { client_name: msg } };
   }
 }
