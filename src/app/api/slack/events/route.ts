@@ -1,13 +1,16 @@
-import { after, NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
+import { NextResponse } from "next/server";
 import { isSlackBotConfigured, slackSigningSecret, verifySlackRequest } from "@/lib/slack/config";
 import { slackApi, slackPostEphemeral, slackPostMessage } from "@/lib/slack/api";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 type SlackEventPayload = {
   type?: string;
   challenge?: string;
   event_id?: string;
+  authorizations?: { user_id?: string }[];
   event?: {
     type?: string;
     user?: string;
@@ -16,6 +19,7 @@ type SlackEventPayload = {
     ts?: string;
     thread_ts?: string;
     bot_id?: string;
+    subtype?: string;
   };
 };
 
@@ -36,7 +40,6 @@ function claimEventId(eventId: string | undefined): boolean {
 
 function wantsSendContract(text: string): boolean {
   const t = text.toLowerCase();
-  // Strip bot mention tokens like <@U123> or <@U123|name>
   const cleaned = t.replace(/<@[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   return (
     cleaned.includes("send contract") ||
@@ -91,10 +94,6 @@ async function postToUserDm(opts: {
   });
 }
 
-/**
- * Prefer a visible thread/channel reply (reliable). Fall back to ephemeral, then DM.
- * Runs after HTTP 200 so Slack does not retry for the 3s timeout.
- */
 async function promptSendContract(opts: {
   channel: string;
   userId: string;
@@ -102,7 +101,6 @@ async function promptSendContract(opts: {
   parentTs?: string;
 }): Promise<void> {
   const { channel, userId, threadTs, parentTs } = opts;
-  // In a thread use parent ts; otherwise reply in a new thread under the mention.
   const replyThreadTs = threadTs ?? parentTs ?? undefined;
   const blocks = sendContractBlocks(channel, replyThreadTs ?? null);
 
@@ -119,7 +117,7 @@ async function promptSendContract(opts: {
     });
     return;
   }
-  console.error("[slack/events] postMessage failed:", posted.error);
+  console.error("[slack/events] postMessage failed:", posted.error, { channel, userId });
 
   const ephemeral = await slackPostEphemeral({
     channel,
@@ -129,7 +127,7 @@ async function promptSendContract(opts: {
     blocks,
   });
   if (ephemeral.ok) {
-    console.info("[slack/events] ephemeral Send contract button ok after postMessage failure");
+    console.info("[slack/events] ephemeral ok after postMessage failure");
     return;
   }
   console.error("[slack/events] ephemeral failed:", ephemeral.error);
@@ -141,14 +139,45 @@ async function promptSendContract(opts: {
   });
   if (!dm.ok) {
     console.error("[slack/events] DM fallback failed:", dm.error);
+    // One more breadcrumb for ops: auth.test shows which bot/token is live.
+    const auth = await slackApi<{ user_id?: string; team?: string; error?: string }>("auth.test", {});
+    console.error("[slack/events] auth.test", auth);
   } else {
     console.info("[slack/events] sent Send contract button via DM");
   }
 }
 
+async function handleMention(opts: {
+  channel: string;
+  userId: string;
+  text: string;
+  threadTs?: string;
+  parentTs?: string;
+}): Promise<void> {
+  if (!wantsSendContract(opts.text)) {
+    const hint = await slackPostMessage({
+      channel: opts.channel,
+      threadTs: opts.threadTs ?? opts.parentTs,
+      text: "To send a contract, say `@Sign Flow send contract` (or use `/send-contract`).",
+    });
+    if (!hint.ok) {
+      console.error("[slack/events] hint postMessage failed:", hint.error);
+      await postToUserDm({
+        userId: opts.userId,
+        text: "To send a contract, say `@Sign Flow send contract` (or use `/send-contract`).",
+      });
+    }
+    return;
+  }
+
+  await promptSendContract(opts);
+}
+
 /**
- * Slack Events API — app_mention prompts for the contract form.
- * Always ack within ~3s; do Slack API work in after().
+ * Slack Events API — app_mention (and mention-in-message fallback) → contract form button.
+ *
+ * Ack strategy: start work immediately, keep it alive with waitUntil, and also wait up to
+ * ~2.5s in-request so a warm function usually finishes before Slack’s 3s retry window.
  */
 export async function POST(req: Request) {
   const secret = slackSigningSecret();
@@ -185,69 +214,67 @@ export async function POST(req: Request) {
 
   const event = payload.event;
   const retryNum = req.headers.get("x-slack-retry-num");
-  if (retryNum) {
-    console.warn("[slack/events] Slack retry", {
-      retryNum,
-      reason: req.headers.get("x-slack-retry-reason"),
-      eventId: payload.event_id,
-      eventType: event?.type,
-    });
+
+  console.info("[slack/events] inbound", {
+    payloadType: payload.type,
+    eventType: event?.type,
+    subtype: event?.subtype ?? null,
+    eventId: payload.event_id ?? null,
+    channel: event?.channel ?? null,
+    threadTs: event?.thread_ts ?? null,
+    hasBotId: Boolean(event?.bot_id),
+    retryNum: retryNum ?? null,
+    retryReason: req.headers.get("x-slack-retry-reason"),
+    textPreview: (event?.text ?? "").slice(0, 100),
+  });
+
+  if (payload.type !== "event_callback" || !event) {
+    return NextResponse.json({ ok: true });
   }
 
-  if (payload.type === "event_callback" && event?.type === "app_mention" && !event.bot_id) {
-    if (!claimEventId(payload.event_id)) {
-      console.info("[slack/events] duplicate event_id ignored", payload.event_id);
-      return NextResponse.json({ ok: true });
-    }
-
-    const channel = event.channel ?? "";
-    const userId = event.user ?? "";
-    const text = event.text ?? "";
-    const threadTs = event.thread_ts ?? undefined;
-
-    if (!channel || !userId) {
-      return NextResponse.json({ ok: true });
-    }
-
-    console.info("[slack/events] app_mention", {
-      eventId: payload.event_id,
-      channel,
-      threadTs: threadTs ?? null,
-      wantsSend: wantsSendContract(text),
-      textPreview: text.slice(0, 80),
-    });
-
-    // Ack first — Slack retries if we await chat.* here and blow the 3s budget.
-    after(async () => {
-      try {
-        if (!wantsSendContract(text)) {
-          const hint = await slackPostEphemeral({
-            channel,
-            user: userId,
-            threadTs,
-            text: "To send a contract, say `@Sign Flow send contract` (or use `/send-contract`).",
-          });
-          if (!hint.ok) {
-            await slackPostMessage({
-              channel,
-              threadTs: threadTs ?? event.ts,
-              text: "To send a contract, say `@Sign Flow send contract` (or use `/send-contract`).",
-            });
-          }
-          return;
-        }
-
-        await promptSendContract({
-          channel,
-          userId,
-          threadTs,
-          parentTs: event.ts,
-        });
-      } catch (e) {
-        console.error("[slack/events] handler error", e);
-      }
-    });
+  // Ignore bot/system message noise.
+  if (event.bot_id || event.subtype === "bot_message" || event.subtype === "message_changed") {
+    return NextResponse.json({ ok: true });
   }
+
+  const botUserId = payload.authorizations?.[0]?.user_id;
+  const isAppMention = event.type === "app_mention";
+  const isMessageMention =
+    event.type === "message" &&
+    Boolean(event.text) &&
+    (botUserId ? event.text!.includes(`<@${botUserId}>`) : /<@[A-Z0-9]+>/i.test(event.text!));
+
+  if (!isAppMention && !isMessageMention) {
+    return NextResponse.json({ ok: true });
+  }
+
+  if (!claimEventId(payload.event_id)) {
+    console.info("[slack/events] duplicate event_id ignored", payload.event_id);
+    return NextResponse.json({ ok: true });
+  }
+
+  const channel = event.channel ?? "";
+  const userId = event.user ?? "";
+  const text = event.text ?? "";
+  if (!channel || !userId) {
+    return NextResponse.json({ ok: true });
+  }
+
+  const work = handleMention({
+    channel,
+    userId,
+    text,
+    threadTs: event.thread_ts,
+    parentTs: event.ts,
+  }).catch((e) => {
+    console.error("[slack/events] handler error", e);
+  });
+
+  // Keep the invocation alive on Vercel after we return.
+  waitUntil(work);
+
+  // Usually finish before Slack’s 3s timeout so retries are rare on warm starts.
+  await Promise.race([work, new Promise<void>((r) => setTimeout(r, 2500))]);
 
   return NextResponse.json({ ok: true });
 }

@@ -80,8 +80,10 @@ In each channel where staff will send contracts:
 
 If @mention does nothing: confirm Event Subscriptions includes `app_mention`, Interactivity URL is saved, the bot is `/invite`d in that channel, and Vercel has `SLACK_BOT_TOKEN` + `SLACK_SIGNING_SECRET`. Try `/send-contract` in the same channel to confirm the bot token works. In Vercel logs, open `POST /api/slack/events` and look for `[slack/events]` lines (including Slack retry / postMessage errors).  
 
-**Slash command**  
-`/send-contract` → modal opens immediately  
+**Slash command (channel only — not threads)**  
+`/send-contract` in the **main channel composer** → modal opens immediately  
+
+Slack itself blocks custom slash commands inside threads (`"/send-contract is not supported in threads"`). That message is from Slack, not Sign Flow — our `/api/slack/commands` endpoint is never called. In a thread, use `@Sign Flow send contract` instead.
 
 ## Email From (clients vs team)
 
