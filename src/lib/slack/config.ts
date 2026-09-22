@@ -18,6 +18,23 @@ export function slackDefaultFirmId(): string {
 }
 
 /**
+ * Absolute public origin for Slack deep links (no trailing slash).
+ * Prefer SIGNFLOW_EMAIL_PUBLIC_ORIGIN; fall back to VERCEL_URL on Vercel.
+ */
+export function slackPublicAppOrigin(): string | null {
+  const configured =
+    process.env.SIGNFLOW_EMAIL_PUBLIC_ORIGIN?.trim() ||
+    process.env.NEXT_PUBLIC_SIGNFLOW_EMAIL_PUBLIC_ORIGIN?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  const vercel = process.env.VERCEL_URL?.trim();
+  if (vercel) {
+    const host = vercel.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+    return host ? `https://${host}` : null;
+  }
+  return null;
+}
+
+/**
  * Verify Slack request signature.
  * @see https://api.slack.com/authentication/verifying-requests-from-slack
  */

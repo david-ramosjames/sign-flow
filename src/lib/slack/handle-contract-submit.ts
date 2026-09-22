@@ -1,6 +1,7 @@
 import { templateRequiresDateOfLoss } from "@/lib/docuseal-prefill";
 import { getFirmDocusealConnection } from "@/lib/firms";
 import { slackPostEphemeral, slackPostMessage } from "@/lib/slack/api";
+import { slackPublicAppOrigin } from "@/lib/slack/config";
 import {
   languageForTemplateName,
   type SlackContractModalMeta,
@@ -9,7 +10,7 @@ import { getTemplate } from "@/services/docuseal-client";
 import { appendSigningEvent } from "@/services/signing-events";
 import { createLeadAndSigningRequest } from "@/server/signing-workflow";
 
-type SlackViewState = {
+export type SlackViewState = {
   values?: Record<
     string,
     Record<
@@ -22,6 +23,18 @@ type SlackViewState = {
       }
     >
   >;
+};
+
+type ValidatedContractSubmit = {
+  meta: SlackContractModalMeta;
+  templateId: number;
+  templateName: string;
+  clientName: string;
+  phone: string;
+  email: string | null;
+  dateOfLoss: string | null;
+  alsoEmail: boolean;
+  language: ReturnType<typeof languageForTemplateName>;
 };
 
 function fieldValue(state: SlackViewState, blockId: string, actionId = "value"): string {
@@ -42,10 +55,11 @@ function checkboxYes(state: SlackViewState, blockId: string): boolean {
   return opts.some((o) => o.value === "yes");
 }
 
-export async function handleContractModalSubmission(opts: {
+/** Fast validation only — keep under Slack’s ~3s view_submission budget. */
+export async function validateContractModalSubmission(opts: {
   meta: SlackContractModalMeta;
   state: SlackViewState;
-}): Promise<{ ok: true } | { ok: false; errors: Record<string, string> }> {
+}): Promise<{ ok: true; data: ValidatedContractSubmit } | { ok: false; errors: Record<string, string> }> {
   const { meta, state } = opts;
   const templateIdRaw = selectedOption(state, "template", "template_id");
   const templateId = Number(templateIdRaw);
@@ -78,21 +92,38 @@ export async function handleContractModalSubmission(opts: {
     };
   }
 
-  const language = languageForTemplateName(template.name);
+  return {
+    ok: true,
+    data: {
+      meta,
+      templateId,
+      templateName: template.name,
+      clientName,
+      phone,
+      email,
+      dateOfLoss,
+      alsoEmail,
+      language: languageForTemplateName(template.name),
+    },
+  };
+}
 
+/** Send SMS/email and post the Slack confirmation (run via waitUntil after modal clears). */
+export async function executeContractModalSend(data: ValidatedContractSubmit): Promise<void> {
+  const { meta } = data;
   try {
     const { signingRequest, deliveryWarning } = await createLeadAndSigningRequest(
       {
-        clientName,
-        phone,
-        email,
-        language,
+        clientName: data.clientName,
+        phone: data.phone,
+        email: data.email,
+        language: data.language,
         source: "slack",
-        templateId,
-        dateOfLoss,
+        templateId: data.templateId,
+        dateOfLoss: data.dateOfLoss,
         hipaaPrefill: null,
         sendSms: true,
-        sendEmail: alsoEmail && Boolean(email),
+        sendEmail: data.alsoEmail && Boolean(data.email),
         reminderEnabled: true,
         assignedTo: meta.userName || null,
         firmId: meta.firmId,
@@ -111,19 +142,18 @@ export async function handleContractModalSubmission(opts: {
       },
     });
 
-    const appOrigin =
-      process.env.SIGNFLOW_EMAIL_PUBLIC_ORIGIN?.trim() ||
-      process.env.NEXT_PUBLIC_SIGNFLOW_EMAIL_PUBLIC_ORIGIN?.trim() ||
-      "";
+    const origin = slackPublicAppOrigin();
     const requestPath = `/dashboard/requests/${signingRequest.id}`;
-    const requestUrl = appOrigin ? `${appOrigin.replace(/\/$/, "")}${requestPath}` : requestPath;
+    const requestLine = origin
+      ? `• Request: <${origin}${requestPath}|Open in Sign Flow>`
+      : `• Request id: \`${signingRequest.id}\``;
 
     const lines = [
-      `*Contract sent* to *${clientName}*`,
-      `• Phone: ${phone}`,
-      alsoEmail && email ? `• Email: ${email}` : null,
-      `• Template: ${template.name}`,
-      `• Request: <${requestUrl}|Open in Sign Flow>`,
+      `*Contract sent* to *${data.clientName}*`,
+      `• Phone: ${data.phone}`,
+      data.alsoEmail && data.email ? `• Email: ${data.email}` : null,
+      `• Template: ${data.templateName}`,
+      requestLine,
       deliveryWarning ? `• Warning: ${deliveryWarning}` : null,
     ].filter(Boolean);
 
@@ -132,15 +162,14 @@ export async function handleContractModalSubmission(opts: {
       text: lines.join("\n"),
       threadTs: meta.threadTs ?? undefined,
     });
-
-    return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to send contract";
+    console.error("[slack/submit] execute failed:", msg);
     await slackPostEphemeral({
       channel: meta.channelId,
       user: meta.userId,
+      threadTs: meta.threadTs ?? undefined,
       text: `Could not send contract: ${msg}`,
     }).catch(() => undefined);
-    return { ok: false, errors: { client_name: msg } };
   }
 }

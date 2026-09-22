@@ -1,3 +1,4 @@
+import { waitUntil } from "@vercel/functions";
 import { NextResponse } from "next/server";
 import { isSlackBotConfigured, slackSigningSecret, verifySlackRequest } from "@/lib/slack/config";
 import {
@@ -5,10 +6,15 @@ import {
   openContractModal,
   type SlackContractModalMeta,
 } from "@/lib/slack/contract-modal";
-import { handleContractModalSubmission } from "@/lib/slack/handle-contract-submit";
+import {
+  executeContractModalSend,
+  validateContractModalSubmission,
+  type SlackViewState,
+} from "@/lib/slack/handle-contract-submit";
 import { slackPostEphemeral } from "@/lib/slack/api";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 type SlackInteractionPayload = {
   type?: string;
@@ -95,18 +101,21 @@ export async function POST(req: Request) {
       });
     }
 
-    const result = await handleContractModalSubmission({
+    // Validate quickly, then clear the modal. Slack times out view_submission at ~3s;
+    // createLeadAndSigningRequest (SMS/email) must run after clear via waitUntil.
+    const validated = await validateContractModalSubmission({
       meta,
-      state: (payload.view.state ?? {}) as Parameters<typeof handleContractModalSubmission>[0]["state"],
+      state: (payload.view.state ?? {}) as SlackViewState,
     });
 
-    if (!result.ok) {
+    if (!validated.ok) {
       return NextResponse.json({
         response_action: "errors",
-        errors: result.errors,
+        errors: validated.errors,
       });
     }
 
+    waitUntil(executeContractModalSend(validated.data));
     return NextResponse.json({ response_action: "clear" });
   }
 

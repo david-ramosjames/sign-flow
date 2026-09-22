@@ -60,6 +60,8 @@ SLACK_DEFAULT_FIRM_ID=ramos-james
 SIGNFLOW_EMAIL_PUBLIC_ORIGIN=https://YOUR_APP
 ```
 
+`SIGNFLOW_EMAIL_PUBLIC_ORIGIN` makes the “Open in Sign Flow” link in Slack an absolute URL (required for Slack mrkdwn links).
+
 Redeploy after setting env vars.
 
 ## 6. Invite the bot
