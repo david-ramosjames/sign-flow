@@ -1,6 +1,6 @@
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { isSlackBotConfigured, slackSigningSecret, verifySlackRequest } from "@/lib/slack/config";
-import { slackPostEphemeral } from "@/lib/slack/api";
+import { slackPostEphemeral, slackPostMessage } from "@/lib/slack/api";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ type SlackEventPayload = {
 
 function wantsSendContract(text: string): boolean {
   const t = text.toLowerCase();
-  // Strip bot mention tokens like <@U123>
+  // Strip bot mention tokens like <@U123> or <@U123|name>
   const cleaned = t.replace(/<@[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   return (
     cleaned.includes("send contract") ||
@@ -28,6 +28,85 @@ function wantsSendContract(text: string): boolean {
     cleaned === "contract" ||
     cleaned.startsWith("contract ")
   );
+}
+
+function sendContractBlocks(channel: string, threadTs: string | null) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "Ready to send a contract? Tap the button to open the form.",
+      },
+    },
+    {
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          action_id: "open_send_contract_modal",
+          text: { type: "plain_text", text: "Send contract" },
+          style: "primary",
+          value: JSON.stringify({
+            channelId: channel,
+            threadTs,
+          }),
+        },
+      ],
+    },
+  ] as Record<string, unknown>[];
+}
+
+/**
+ * Post the “Send contract” prompt. Prefer ephemeral (only the mentioning user).
+ * Await before responding — Slack allows ~3s and Vercel may drop after()-style work.
+ */
+async function promptSendContract(opts: {
+  channel: string;
+  userId: string;
+  threadTs?: string;
+  parentTs?: string;
+}): Promise<void> {
+  const { channel, userId, threadTs, parentTs } = opts;
+  const replyThreadTs = threadTs ?? parentTs ?? null;
+  const blocks = sendContractBlocks(channel, replyThreadTs);
+
+  const ephemeral = await slackPostEphemeral({
+    channel,
+    user: userId,
+    threadTs,
+    text: "Open the contract form:",
+    blocks,
+  });
+  if (ephemeral.ok) return;
+
+  // Retry without thread_ts (some workspaces reject ephemeral+thread_ts).
+  if (threadTs) {
+    const retry = await slackPostEphemeral({
+      channel,
+      user: userId,
+      text: "Open the contract form:",
+      blocks,
+    });
+    if (retry.ok) {
+      console.warn("[slack/events] ephemeral ok without thread_ts; prior error:", ephemeral.error);
+      return;
+    }
+    console.error("[slack/events] ephemeral failed:", ephemeral.error, "retry:", retry.error);
+  } else {
+    console.error("[slack/events] ephemeral failed:", ephemeral.error);
+  }
+
+  // Last resort: visible thread/channel reply so the user still gets a button.
+  const posted = await slackPostMessage({
+    channel,
+    threadTs: replyThreadTs ?? undefined,
+    text: "Open the contract form:",
+    blocks,
+  });
+  if (!posted.ok) {
+    console.error("[slack/events] postMessage fallback failed:", posted.error);
+  }
 }
 
 /**
@@ -74,64 +153,27 @@ export async function POST(req: Request) {
     const text = event.text ?? "";
     const threadTs = event.thread_ts ?? undefined;
 
-    if (!wantsSendContract(text)) {
-      if (channel && userId) {
-        after(() =>
-          slackPostEphemeral({
-            channel,
-            user: userId,
-            threadTs,
-            text: "To send a contract, say `@Sign Flow send contract` (or use `/send-contract`).",
-          }),
-        );
-      }
+    if (!channel || !userId) {
       return NextResponse.json({ ok: true });
     }
 
-    // App mentions don't include trigger_id — open a DM shortcut via response_url isn't available.
-    // Use conversations.open + a button is complex; instead reply with instructions to use slash
-    // OR use chat.postEphemeral with a link... Slack requires trigger_id for modals.
-    // For app_mention we open a message with a button that has trigger_id from interaction.
-    // Simplest UX that works: post ephemeral telling them to use /send-contract,
-    // AND try response with "please use /send-contract for the form".
-    //
-    // Better: use shortcuts with global shortcut that has trigger_id.
-    // For @mention without trigger_id, Slack cannot open a modal.
-    // Work around: post an ephemeral message with a Block Kit button; clicking the button
-    // fires a block_actions interaction WITH trigger_id.
-
-    after(async () => {
-      if (!channel || !userId) return;
+    if (!wantsSendContract(text)) {
       await slackPostEphemeral({
         channel,
         user: userId,
         threadTs,
-        text: "Open the contract form:",
-        blocks: [
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "Ready to send a contract? Tap the button to open the form.",
-            },
-          },
-          {
-            type: "actions",
-            elements: [
-              {
-                type: "button",
-                action_id: "open_send_contract_modal",
-                text: { type: "plain_text", text: "Send contract" },
-                style: "primary",
-                value: JSON.stringify({
-                  channelId: channel,
-                  threadTs: event.thread_ts || event.ts || null,
-                }),
-              },
-            ],
-          },
-        ],
+        text: "To send a contract, say `@Sign Flow send contract` (or use `/send-contract`).",
       });
+      return NextResponse.json({ ok: true });
+    }
+
+    // App mentions have no trigger_id — modal opens after the user taps the button
+    // (block_actions interaction includes trigger_id).
+    await promptSendContract({
+      channel,
+      userId,
+      threadTs,
+      parentTs: event.ts,
     });
   }
 
