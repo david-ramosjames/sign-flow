@@ -73,10 +73,12 @@ In each channel where staff will send contracts:
 ## 7. How staff use it
 
 **@ mention (recommended for your team)**  
-1. `@Sign Flow send contract`  
-2. Tap **Send contract** in the ephemeral message  
+1. `@Sign Flow send contract` (works in **threads** too — include the words *send contract*)  
+2. Tap **Send contract** in the ephemeral message (only **you** see it; in a thread it appears inside that thread)  
 3. Fill the modal (client, phone, template, date of loss)  
 4. Submit — SMS goes out; optional email if checked  
+
+If @mention does nothing: confirm Event Subscriptions includes `app_mention`, Interactivity URL is saved, the bot is `/invite`d in that channel, and Vercel has `SLACK_BOT_TOKEN` + `SLACK_SIGNING_SECRET`. Try `/send-contract` in the same channel to confirm the bot token works.  
 
 **Slash command**  
 `/send-contract` → modal opens immediately  

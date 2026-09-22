@@ -76,6 +76,7 @@ export async function POST(req: Request) {
         await slackPostEphemeral({
           channel: channelId,
           user: userId,
+          threadTs: threadTs ?? undefined,
           text: `Could not open the contract form: ${opened.error}`,
         }).catch(() => undefined);
       }

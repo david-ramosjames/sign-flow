@@ -31,11 +31,16 @@ export async function slackPostEphemeral(opts: {
   channel: string;
   user: string;
   text: string;
+  /** When replying inside a thread, pass the parent message ts so the user sees it in the thread. */
+  threadTs?: string;
+  blocks?: Record<string, unknown>[];
 }): Promise<void> {
   await slackApi("chat.postEphemeral", {
     channel: opts.channel,
     user: opts.user,
     text: opts.text,
+    ...(opts.threadTs ? { thread_ts: opts.threadTs } : {}),
+    ...(opts.blocks?.length ? { blocks: opts.blocks } : {}),
   });
 }
 

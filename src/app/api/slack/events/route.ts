@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { isSlackBotConfigured, slackSigningSecret, verifySlackRequest } from "@/lib/slack/config";
-import { slackApi, slackPostEphemeral } from "@/lib/slack/api";
+import { slackPostEphemeral } from "@/lib/slack/api";
 
 export const dynamic = "force-dynamic";
 
@@ -72,14 +72,18 @@ export async function POST(req: Request) {
     const channel = event.channel ?? "";
     const userId = event.user ?? "";
     const text = event.text ?? "";
+    const threadTs = event.thread_ts ?? undefined;
 
     if (!wantsSendContract(text)) {
       if (channel && userId) {
-        void slackPostEphemeral({
-          channel,
-          user: userId,
-          text: "To send a contract, say `@Sign Flow send contract` (or use `/send-contract`).",
-        });
+        after(() =>
+          slackPostEphemeral({
+            channel,
+            user: userId,
+            threadTs,
+            text: "To send a contract, say `@Sign Flow send contract` (or use `/send-contract`).",
+          }),
+        );
       }
       return NextResponse.json({ ok: true });
     }
@@ -96,11 +100,12 @@ export async function POST(req: Request) {
     // Work around: post an ephemeral message with a Block Kit button; clicking the button
     // fires a block_actions interaction WITH trigger_id.
 
-    void (async () => {
+    after(async () => {
       if (!channel || !userId) return;
-      await slackApi("chat.postEphemeral", {
+      await slackPostEphemeral({
         channel,
         user: userId,
+        threadTs,
         text: "Open the contract form:",
         blocks: [
           {
@@ -127,7 +132,7 @@ export async function POST(req: Request) {
           },
         ],
       });
-    })();
+    });
   }
 
   return NextResponse.json({ ok: true });
