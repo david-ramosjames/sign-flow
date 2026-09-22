@@ -1,12 +1,13 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { isSlackBotConfigured, slackSigningSecret, verifySlackRequest } from "@/lib/slack/config";
-import { slackPostEphemeral, slackPostMessage } from "@/lib/slack/api";
+import { slackApi, slackPostEphemeral, slackPostMessage } from "@/lib/slack/api";
 
 export const dynamic = "force-dynamic";
 
 type SlackEventPayload = {
   type?: string;
   challenge?: string;
+  event_id?: string;
   event?: {
     type?: string;
     user?: string;
@@ -17,6 +18,21 @@ type SlackEventPayload = {
     bot_id?: string;
   };
 };
+
+/** Best-effort dedupe for Slack retries (same event_id within a warm instance). */
+const seenEventIds = new Map<string, number>();
+const EVENT_DEDUP_TTL_MS = 10 * 60 * 1000;
+
+function claimEventId(eventId: string | undefined): boolean {
+  if (!eventId) return true;
+  const now = Date.now();
+  for (const [id, at] of seenEventIds) {
+    if (now - at > EVENT_DEDUP_TTL_MS) seenEventIds.delete(id);
+  }
+  if (seenEventIds.has(eventId)) return false;
+  seenEventIds.set(eventId, now);
+  return true;
+}
 
 function wantsSendContract(text: string): boolean {
   const t = text.toLowerCase();
@@ -57,9 +73,27 @@ function sendContractBlocks(channel: string, threadTs: string | null) {
   ] as Record<string, unknown>[];
 }
 
+async function postToUserDm(opts: {
+  userId: string;
+  text: string;
+  blocks?: Record<string, unknown>[];
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const opened = await slackApi<{ channel?: { id?: string } }>("conversations.open", {
+    users: opts.userId,
+  });
+  if (!opened.ok) return opened;
+  const dmChannel = opened.data.channel?.id;
+  if (!dmChannel) return { ok: false, error: "conversations.open missing channel id" };
+  return slackPostMessage({
+    channel: dmChannel,
+    text: opts.text,
+    blocks: opts.blocks,
+  });
+}
+
 /**
- * Post the “Send contract” prompt. Prefer ephemeral (only the mentioning user).
- * Await before responding — Slack allows ~3s and Vercel may drop after()-style work.
+ * Prefer a visible thread/channel reply (reliable). Fall back to ephemeral, then DM.
+ * Runs after HTTP 200 so Slack does not retry for the 3s timeout.
  */
 async function promptSendContract(opts: {
   channel: string;
@@ -68,49 +102,53 @@ async function promptSendContract(opts: {
   parentTs?: string;
 }): Promise<void> {
   const { channel, userId, threadTs, parentTs } = opts;
-  const replyThreadTs = threadTs ?? parentTs ?? null;
-  const blocks = sendContractBlocks(channel, replyThreadTs);
+  // In a thread use parent ts; otherwise reply in a new thread under the mention.
+  const replyThreadTs = threadTs ?? parentTs ?? undefined;
+  const blocks = sendContractBlocks(channel, replyThreadTs ?? null);
+
+  const posted = await slackPostMessage({
+    channel,
+    threadTs: replyThreadTs,
+    text: "Open the contract form:",
+    blocks,
+  });
+  if (posted.ok) {
+    console.info("[slack/events] posted Send contract button", {
+      channel,
+      threadTs: replyThreadTs ?? null,
+    });
+    return;
+  }
+  console.error("[slack/events] postMessage failed:", posted.error);
 
   const ephemeral = await slackPostEphemeral({
     channel,
     user: userId,
-    threadTs,
+    threadTs: replyThreadTs,
     text: "Open the contract form:",
     blocks,
   });
-  if (ephemeral.ok) return;
-
-  // Retry without thread_ts (some workspaces reject ephemeral+thread_ts).
-  if (threadTs) {
-    const retry = await slackPostEphemeral({
-      channel,
-      user: userId,
-      text: "Open the contract form:",
-      blocks,
-    });
-    if (retry.ok) {
-      console.warn("[slack/events] ephemeral ok without thread_ts; prior error:", ephemeral.error);
-      return;
-    }
-    console.error("[slack/events] ephemeral failed:", ephemeral.error, "retry:", retry.error);
-  } else {
-    console.error("[slack/events] ephemeral failed:", ephemeral.error);
+  if (ephemeral.ok) {
+    console.info("[slack/events] ephemeral Send contract button ok after postMessage failure");
+    return;
   }
+  console.error("[slack/events] ephemeral failed:", ephemeral.error);
 
-  // Last resort: visible thread/channel reply so the user still gets a button.
-  const posted = await slackPostMessage({
-    channel,
-    threadTs: replyThreadTs ?? undefined,
-    text: "Open the contract form:",
+  const dm = await postToUserDm({
+    userId,
+    text: `Could not post in the channel (${posted.error}). Open the form here:`,
     blocks,
   });
-  if (!posted.ok) {
-    console.error("[slack/events] postMessage fallback failed:", posted.error);
+  if (!dm.ok) {
+    console.error("[slack/events] DM fallback failed:", dm.error);
+  } else {
+    console.info("[slack/events] sent Send contract button via DM");
   }
 }
 
 /**
- * Slack Events API — app_mention opens the contract modal when the message asks to send a contract.
+ * Slack Events API — app_mention prompts for the contract form.
+ * Always ack within ~3s; do Slack API work in after().
  */
 export async function POST(req: Request) {
   const secret = slackSigningSecret();
@@ -134,7 +172,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // Slack Event Subscriptions URL verification (must return the challenge as plain text).
   if (payload.type === "url_verification" && payload.challenge) {
     return new NextResponse(payload.challenge, {
       status: 200,
@@ -147,7 +184,22 @@ export async function POST(req: Request) {
   }
 
   const event = payload.event;
+  const retryNum = req.headers.get("x-slack-retry-num");
+  if (retryNum) {
+    console.warn("[slack/events] Slack retry", {
+      retryNum,
+      reason: req.headers.get("x-slack-retry-reason"),
+      eventId: payload.event_id,
+      eventType: event?.type,
+    });
+  }
+
   if (payload.type === "event_callback" && event?.type === "app_mention" && !event.bot_id) {
+    if (!claimEventId(payload.event_id)) {
+      console.info("[slack/events] duplicate event_id ignored", payload.event_id);
+      return NextResponse.json({ ok: true });
+    }
+
     const channel = event.channel ?? "";
     const userId = event.user ?? "";
     const text = event.text ?? "";
@@ -157,23 +209,43 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    if (!wantsSendContract(text)) {
-      await slackPostEphemeral({
-        channel,
-        user: userId,
-        threadTs,
-        text: "To send a contract, say `@Sign Flow send contract` (or use `/send-contract`).",
-      });
-      return NextResponse.json({ ok: true });
-    }
-
-    // App mentions have no trigger_id — modal opens after the user taps the button
-    // (block_actions interaction includes trigger_id).
-    await promptSendContract({
+    console.info("[slack/events] app_mention", {
+      eventId: payload.event_id,
       channel,
-      userId,
-      threadTs,
-      parentTs: event.ts,
+      threadTs: threadTs ?? null,
+      wantsSend: wantsSendContract(text),
+      textPreview: text.slice(0, 80),
+    });
+
+    // Ack first — Slack retries if we await chat.* here and blow the 3s budget.
+    after(async () => {
+      try {
+        if (!wantsSendContract(text)) {
+          const hint = await slackPostEphemeral({
+            channel,
+            user: userId,
+            threadTs,
+            text: "To send a contract, say `@Sign Flow send contract` (or use `/send-contract`).",
+          });
+          if (!hint.ok) {
+            await slackPostMessage({
+              channel,
+              threadTs: threadTs ?? event.ts,
+              text: "To send a contract, say `@Sign Flow send contract` (or use `/send-contract`).",
+            });
+          }
+          return;
+        }
+
+        await promptSendContract({
+          channel,
+          userId,
+          threadTs,
+          parentTs: event.ts,
+        });
+      } catch (e) {
+        console.error("[slack/events] handler error", e);
+      }
     });
   }
 
