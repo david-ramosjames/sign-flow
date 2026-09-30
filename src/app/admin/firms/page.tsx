@@ -319,7 +319,7 @@ export default function AdminFirmsPage() {
               {selected?.hasDocusealApiKey
                 ? "This firm has a stored DocuSeal API key. Leave key/secret fields blank to keep them."
                 : selected?.usesEnvDocuseal
-                  ? "Currently using the shared DOCUSEAL_* environment variables. Paste this firm’s own API URL and key to connect a separate DocuSeal."
+                ? "Currently using the shared DOCUSEAL_* environment variables. Paste this firm’s own API URL and key to connect a separate DocuSeal."
                   : "Add this firm’s DocuSeal API URL and key."}
             </p>
             <label className="mt-3 block text-sm font-medium text-slate-900">API URL</label>
@@ -352,12 +352,12 @@ export default function AdminFirmsPage() {
             />
             <label className="mt-3 block text-sm font-medium text-slate-900">Webhook secret</label>
             <div className="mt-1 flex flex-wrap gap-2">
-              <input
+            <input
                 className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                type="password"
-                autoComplete="off"
-                value={form.docusealWebhookSecret}
-                onChange={(e) => setForm((f) => ({ ...f, docusealWebhookSecret: e.target.value }))}
+              type="password"
+              autoComplete="off"
+              value={form.docusealWebhookSecret}
+              onChange={(e) => setForm((f) => ({ ...f, docusealWebhookSecret: e.target.value }))}
                 placeholder={
                   selected?.hasDocusealWebhookSecret
                     ? "Saved — leave blank to keep, or paste a new secret"
@@ -548,7 +548,7 @@ export default function AdminFirmsPage() {
               webhook (often <code className="text-[11px]">whsec_…</code>).
             </p>
             <div className="mt-1 flex flex-wrap gap-2">
-              <input
+            <input
                 className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm"
                 type="password"
                 autoComplete="off"

@@ -1,7 +1,9 @@
 import { waitUntil } from "@vercel/functions";
 import { NextResponse } from "next/server";
 import { isSlackBotConfigured, slackSigningSecret, verifySlackRequest } from "@/lib/slack/config";
+import { parseQuoRouterSlackInbound } from "@/lib/slack/quo-router-stop";
 import { slackApi, slackPostEphemeral, slackPostMessage } from "@/lib/slack/api";
+import { stopRemindersByPhone } from "@/server/signing-workflow";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -232,8 +234,35 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  // Ignore bot/system message noise.
-  if (event.bot_id || event.subtype === "bot_message" || event.subtype === "message_changed") {
+  if (event.subtype === "message_changed") {
+    return NextResponse.json({ ok: true });
+  }
+
+  // Quo Router posts inbound SMS (including STOP) as bot messages — backup when /api/webhooks/quo 401s.
+  if (event.type === "message" && event.bot_id && event.text) {
+    const parsed = parseQuoRouterSlackInbound(event.text);
+    if (parsed) {
+      if (!claimEventId(payload.event_id)) {
+        return NextResponse.json({ ok: true });
+      }
+      const work = stopRemindersByPhone(parsed.fromPhone, "client_sms_stop", {
+        messageBody: parsed.body,
+      })
+        .then((updated) => {
+          console.info("[slack/events] quo router STOP", {
+            from: parsed.fromPhone,
+            stopped: updated.length,
+          });
+        })
+        .catch((e) => console.error("[slack/events] quo router STOP failed", e));
+      waitUntil(work);
+      await Promise.race([work, new Promise<void>((r) => setTimeout(r, 2500))]);
+      return NextResponse.json({ ok: true });
+    }
+  }
+
+  // Ignore other bot/system message noise.
+  if (event.bot_id || event.subtype === "bot_message") {
     return NextResponse.json({ ok: true });
   }
 

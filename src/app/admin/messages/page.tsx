@@ -327,7 +327,7 @@ export default function AdminMessagesPage() {
                 signed after this many days, Sign Flow cancels it automatically (reminders stop). Leave blank to
                 disable. Checked about every 15 minutes.
               </p>
-              <input
+            <input
                 type="number"
                 min={1}
                 max={365}
@@ -422,7 +422,7 @@ export default function AdminMessagesPage() {
               <h3 className="text-sm font-semibold text-slate-900">
                 {sequenceTab === "contract" ? "Contract default reminder — SMS (Spanish)" : "General default reminder — SMS (Spanish)"}
               </h3>
-              <textarea
+            <textarea
                 className="mt-3 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                 value={sequenceTab === "contract" ? comm.reminderSmsTemplateContractEs : comm.reminderSmsTemplateEs}
                 onChange={(e) =>
@@ -432,8 +432,8 @@ export default function AdminMessagesPage() {
                       : { ...c, reminderSmsTemplateEs: e.target.value },
                   )
                 }
-              />
-            </section>
+            />
+          </section>
 
             {sequenceTab === "contract" ? (
               <SequenceEditor
@@ -498,9 +498,9 @@ export default function AdminMessagesPage() {
               {sequenceTab === "contract" ? (
                 <p className="mt-1 text-xs text-slate-500">Leave blank to use the general signing email.</p>
               ) : null}
-              <label className="mt-3 block text-xs font-medium text-slate-600">Subject</label>
-              <input
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            <label className="mt-3 block text-xs font-medium text-slate-600">Subject</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                 value={sequenceTab === "contract" ? comm.signingEmailSubjectTemplateContract : comm.signingEmailSubjectTemplate}
                 onChange={(e) =>
                   setComm((c) =>
@@ -509,10 +509,10 @@ export default function AdminMessagesPage() {
                       : { ...c, signingEmailSubjectTemplate: e.target.value },
                   )
                 }
-              />
-              <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
-              <textarea
-                className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            />
+            <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
+            <textarea
+              className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                 value={sequenceTab === "contract" ? comm.signingEmailBodyTemplateContract : comm.signingEmailBodyTemplate}
                 onChange={(e) =>
                   setComm((c) =>
@@ -524,7 +524,7 @@ export default function AdminMessagesPage() {
               />
               {sequenceTab === "general" ? (
                 <>
-                  <label className="mt-4 block text-xs font-medium text-slate-600">HTML email footer (signing + reminders)</label>
+            <label className="mt-4 block text-xs font-medium text-slate-600">HTML email footer (signing + reminders)</label>
                   <textarea className="mt-1 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.emailHtmlFooterTemplate} onChange={(e) => setComm((c) => ({ ...c, emailHtmlFooterTemplate: e.target.value }))} />
                 </>
               ) : null}
@@ -546,7 +546,7 @@ export default function AdminMessagesPage() {
                 }
               />
               <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
-              <textarea
+            <textarea
                 className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                 value={sequenceTab === "contract" ? comm.signingEmailBodyTemplateContractEs : comm.signingEmailBodyTemplateEs}
                 onChange={(e) =>
@@ -563,7 +563,7 @@ export default function AdminMessagesPage() {
                   <textarea className="mt-1 min-h-[90px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={comm.emailHtmlFooterTemplateEs} onChange={(e) => setComm((c) => ({ ...c, emailHtmlFooterTemplateEs: e.target.value }))} />
                 </>
               ) : null}
-            </section>
+          </section>
             <section className="m-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-900">
                 {sequenceTab === "contract" ? "Contract reminder — email (English)" : "General reminder — email (English)"}
@@ -581,7 +581,7 @@ export default function AdminMessagesPage() {
                 }
               />
               <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
-              <textarea
+            <textarea
                 className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                 value={sequenceTab === "contract" ? comm.reminderEmailBodyTemplateContract : comm.reminderEmailBodyTemplate}
                 onChange={(e) =>
@@ -591,15 +591,15 @@ export default function AdminMessagesPage() {
                       : { ...c, reminderEmailBodyTemplate: e.target.value },
                   )
                 }
-              />
-            </section>
+            />
+          </section>
             <section className="m-3 rounded-xl border border-amber-200/80 bg-amber-50/40 p-5 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-900">
                 {sequenceTab === "contract" ? "Contract reminder — email (Spanish)" : "General reminder — email (Spanish)"}
               </h3>
-              <label className="mt-3 block text-xs font-medium text-slate-600">Subject</label>
-              <input
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            <label className="mt-3 block text-xs font-medium text-slate-600">Subject</label>
+            <input
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                 value={sequenceTab === "contract" ? comm.reminderEmailSubjectTemplateContractEs : comm.reminderEmailSubjectTemplateEs}
                 onChange={(e) =>
                   setComm((c) =>
@@ -608,10 +608,10 @@ export default function AdminMessagesPage() {
                       : { ...c, reminderEmailSubjectTemplateEs: e.target.value },
                   )
                 }
-              />
-              <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
-              <textarea
-                className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            />
+            <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
+            <textarea
+              className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                 value={sequenceTab === "contract" ? comm.reminderEmailBodyTemplateContractEs : comm.reminderEmailBodyTemplateEs}
                 onChange={(e) =>
                   setComm((c) =>
@@ -620,11 +620,11 @@ export default function AdminMessagesPage() {
                       : { ...c, reminderEmailBodyTemplateEs: e.target.value },
                   )
                 }
-              />
-            </section>
+            />
+          </section>
             <section className="m-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--card)] p-5 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-900">After signing — team email</h3>
-              <p className="mt-1 text-xs text-slate-600">
+            <p className="mt-1 text-xs text-slate-600">
                 Each address receives its own email with the signed PDF when available.
               </p>
               <label className="mt-4 block text-xs font-medium text-slate-600">Team emails (comma or newline separated)</label>
@@ -634,7 +634,7 @@ export default function AdminMessagesPage() {
               <label className="mt-3 block text-xs font-medium text-slate-600">Body</label>
               <textarea className="mt-1 min-h-[140px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={completion.teamCompletedEmailBodyTemplate} onChange={(e) => setCompletion((c) => ({ ...c, teamCompletedEmailBodyTemplate: e.target.value }))} />
             </section>
-          </div>
+            </div>
 
           {/* ── Save / reload ── */}
           <div className="flex flex-wrap gap-2">
@@ -681,9 +681,9 @@ export default function AdminMessagesPage() {
                     <div className="text-xs font-semibold uppercase tracking-wide text-blue-600">
                       {sequenceTab === "contract" ? "Contract" : "General"} step {idx + 1} custom SMS
                     </div>
-                    <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs text-slate-800 ring-1 ring-slate-200">
+                <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-white p-3 text-xs text-slate-800 ring-1 ring-slate-200">
                       {applyTemplateString(templateForLanguage(previewLanguage, step.smsTemplate, step.smsTemplateEs), previewVars)}
-                    </pre>
+                </pre>
                   </div>
                 ) : null,
               )}

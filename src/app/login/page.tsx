@@ -107,9 +107,14 @@ function LoginForm() {
                 // Confirm the session cookie actually stuck before leaving login.
                 const me = await fetch("/api/auth/me", { credentials: "include", cache: "no-store" });
                 if (!me.ok) {
-                  setError(
-                    "Google sign-in worked, but Sign Flow could not save your session cookie. Try Chrome/Edge, allow cookies for this site, or use a private window without extensions.",
-                  );
+                  const j = (await me.json().catch(() => null)) as { hint?: string; error?: string } | null;
+                  if (me.status === 503 && j?.hint) {
+                    setError(`${j.error ?? "Database unavailable."} ${j.hint}`);
+                  } else {
+                    setError(
+                      "Google sign-in worked, but Sign Flow could not verify your session. Try again in a minute, or use Chrome/Edge with cookies allowed for this site.",
+                    );
+                  }
                   setBusy(false);
                   return;
                 }

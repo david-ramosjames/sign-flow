@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isQuoWebhookAuthorized, processQuoWebhookJson } from "@/server/quo-webhook";
+import { authorizeQuoWebhook, processQuoWebhookJson } from "@/server/quo-webhook";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,13 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request, ctx: { params: Promise<{ firmId: string }> }) {
   const { firmId } = await ctx.params;
   const rawBody = await req.text();
-  if (!(await isQuoWebhookAuthorized(req, rawBody, firmId))) {
+  const auth = await authorizeQuoWebhook(req, rawBody, firmId);
+  if (!auth.ok) {
+    console.warn("[quo/webhook] unauthorized", {
+      firmId,
+      reason: auth.reason,
+      scheme: "scheme" in auth ? auth.scheme : undefined,
+    });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

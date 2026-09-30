@@ -107,6 +107,13 @@ export default function AdminSettingsPage() {
           account’s signing secret on the firm.
         </p>
         <p className="mt-2 text-xs text-slate-600">
+          If Quo webhooks return <strong>401</strong>, copy the signing secret from Quo (Reveal signing secret) into{" "}
+          <code className="rounded bg-slate-100 px-1">QUO_WEBHOOK_SECRET</code> in Vercel and/or Admin → Firms. Legacy
+          Quo webhooks (<code className="rounded bg-slate-100 px-1">apiVersion: v3</code>) use the{" "}
+          <code className="rounded bg-slate-100 px-1">openphone-signature</code> header — Sign Flow verifies both that
+          and newer Svix-style headers.
+        </p>
+        <p className="mt-2 text-xs text-slate-600">
           When a client replies <strong>STOP</strong> (or Spanish <strong>ALTO</strong>), Sign Flow turns off automated
           reminders only — the signing link stays active.
         </p>

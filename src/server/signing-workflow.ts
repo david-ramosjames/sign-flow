@@ -231,8 +231,8 @@ export async function createLeadAndSigningRequest(
         signingSmsFromSettings(appSettings, lead.clientName, signingUrl, language, formKind === "contract"),
         quo,
       );
-      signingRequest.sentViaSms = true;
-      await appendSigningEvent({ signingRequestId: reqId, leadId, type: "sms_sent", metadata: {} });
+    signingRequest.sentViaSms = true;
+    await appendSigningEvent({ signingRequestId: reqId, leadId, type: "sms_sent", metadata: {} });
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       deliveryWarning = error;

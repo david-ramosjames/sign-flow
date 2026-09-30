@@ -25,14 +25,25 @@ function getEnvSigningKey(): string | null {
   return process.env.QUO_WEBHOOK_SECRET?.trim() || process.env.QUO_WEBHOOK_KEY?.trim() || null;
 }
 
-async function resolveSigningKey(firmId?: string): Promise<string | null> {
-  const tryIds = firmId ? [firmId] : [DEFAULT_FIRM_ID];
-  for (const id of tryIds) {
-    const secrets = await getSignFlowStore().getFirmSecrets(id);
-    const firmKey = secrets?.quoWebhookSecret?.trim() || null;
-    if (firmKey) return firmKey;
+/** All signing secrets to try (firm-specific + env). Wrong firm secret must not block env secret. */
+async function resolveSigningKeys(firmId?: string): Promise<string[]> {
+  const keys: string[] = [];
+  const add = (raw: string | null | undefined) => {
+    const t = raw?.trim();
+    if (t && !keys.includes(t)) keys.push(t);
+  };
+
+  const firmIds = firmId ? [firmId] : [DEFAULT_FIRM_ID];
+  for (const id of firmIds) {
+    try {
+      const secrets = await getSignFlowStore().getFirmSecrets(id);
+      add(secrets?.quoWebhookSecret);
+    } catch {
+      /* Firestore unavailable — still try env */
+    }
   }
-  return getEnvSigningKey();
+  add(getEnvSigningKey());
+  return keys;
 }
 
 function hmacKeyCandidates(secret: string): Buffer[] {
@@ -46,14 +57,12 @@ function hmacKeyCandidates(secret: string): Buffer[] {
     }
   };
 
-  // Canonical Quo/Svix: strip optional whsec_ then base64-decode.
   const withoutPrefix = secret.startsWith("whsec_") ? secret.slice("whsec_".length) : secret;
   try {
     add(Buffer.from(withoutPrefix, "base64"));
   } catch {
     /* ignore */
   }
-  // Some Quo UI copies omit the prefix but still give base64 key material.
   if (withoutPrefix !== secret) {
     try {
       add(Buffer.from(secret, "base64"));
@@ -61,27 +70,69 @@ function hmacKeyCandidates(secret: string): Buffer[] {
       /* ignore */
     }
   }
-  // Fallback: treat the copied secret as raw UTF-8 bytes (non-whsec UI values).
   add(Buffer.from(secret, "utf8"));
   return keys;
 }
 
-/**
- * Verify Quo/OpenPhone webhook signature (Svix-style).
- * signed payload = `${webhook-id}.${webhook-timestamp}.${rawBody}`
- *
- * Firm webhooks: use that firm’s Quo webhook secret, else env.
- * Shared `/api/webhooks/quo`: env `QUO_WEBHOOK_SECRET` / `QUO_WEBHOOK_KEY`.
- * If no secret is configured, requests are accepted (open) so local/dev still works.
- */
-export async function isQuoWebhookAuthorized(
-  req: Request,
-  rawBody: string,
-  firmId?: string,
-): Promise<boolean> {
-  const secret = await resolveSigningKey(firmId);
-  if (!secret) return true;
+function openPhoneSignatureHeader(req: Request): string | null {
+  return req.headers.get("openphone-signature") ?? req.headers.get("OpenPhone-Signature");
+}
 
+function hasSvixWebhookHeaders(req: Request): boolean {
+  return Boolean(
+    req.headers.get("webhook-id")?.trim() &&
+      req.headers.get("webhook-timestamp")?.trim() &&
+      req.headers.get("webhook-signature")?.trim(),
+  );
+}
+
+function timingSafeEqualBase64(a: string, b: string): boolean {
+  try {
+    const ab = Buffer.from(a);
+    const bb = Buffer.from(b);
+    if (ab.length !== bb.length) return false;
+    return timingSafeEqual(ab, bb);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Legacy Quo / OpenPhone webhooks (`apiVersion` v2/v3): `openphone-signature: hmac;1;{ms};{sig}`
+ * Signed payload = `{timestamp}.{rawBody}` (timestamp is milliseconds).
+ */
+function verifyLegacyOpenPhoneWithSecret(secret: string, signatureHeader: string, rawBody: string): boolean {
+  const parts = signatureHeader.split(";");
+  if (parts.length < 4 || parts[0] !== "hmac" || parts[1] !== "1") return false;
+
+  const timestamp = parts[2] ?? "";
+  const provided = parts.slice(3).join(";");
+  const tsNum = Number(timestamp);
+  if (!Number.isFinite(tsNum)) return false;
+
+  const tsSec = tsNum > 1_000_000_000_000 ? tsNum / 1000 : tsNum;
+  if (Math.abs(Date.now() / 1000 - tsSec) > 300) return false;
+
+  const bodiesToTry = [rawBody];
+  try {
+    const compact = JSON.stringify(JSON.parse(rawBody));
+    if (compact !== rawBody) bodiesToTry.push(compact);
+  } catch {
+    /* ignore */
+  }
+
+  for (const body of bodiesToTry) {
+    const signed = `${timestamp}.${body}`;
+    for (const key of hmacKeyCandidates(secret)) {
+      const expected = createHmac("sha256", key).update(signed, "utf8").digest("base64");
+      if (timingSafeEqualBase64(expected, provided)) return true;
+    }
+  }
+  return false;
+}
+
+/** Standard Webhooks / Svix (Quo API version 2026-03-30+). */
+function verifyQuoWebhookWithSecret(secret: string, req: Request, rawBody: string): boolean {
   const webhookId = req.headers.get("webhook-id") ?? "";
   const timestamp = req.headers.get("webhook-timestamp") ?? "";
   const signatureHeader = req.headers.get("webhook-signature") ?? "";
@@ -89,7 +140,6 @@ export async function isQuoWebhookAuthorized(
 
   const ts = Number(timestamp);
   if (!Number.isFinite(ts)) return false;
-  // Reject deliveries older than 5 minutes (replay protection).
   if (Math.abs(Math.floor(Date.now() / 1000) - ts) > 300) return false;
 
   const signed = `${webhookId}.${timestamp}.${rawBody}`;
@@ -120,6 +170,58 @@ export async function isQuoWebhookAuthorized(
   return false;
 }
 
+export type QuoWebhookAuthResult =
+  | { ok: true; open: true }
+  | { ok: true; open: false; scheme: "svix" | "openphone-legacy" }
+  | {
+      ok: false;
+      reason: "missing_headers" | "invalid_signature";
+      scheme?: "svix" | "openphone-legacy" | "none";
+    };
+
+/**
+ * Verify Quo/OpenPhone webhook signatures.
+ * Supports legacy OpenPhone (`openphone-signature`, apiVersion v3) and Svix-style headers.
+ */
+export async function authorizeQuoWebhook(
+  req: Request,
+  rawBody: string,
+  firmId?: string,
+): Promise<QuoWebhookAuthResult> {
+  const secrets = await resolveSigningKeys(firmId);
+  if (secrets.length === 0) {
+    return { ok: true, open: true };
+  }
+
+  const svix = hasSvixWebhookHeaders(req);
+  const legacyHeader = openPhoneSignatureHeader(req);
+  const scheme = svix ? "svix" : legacyHeader ? "openphone-legacy" : "none";
+
+  if (!svix && !legacyHeader) {
+    return { ok: false, reason: "missing_headers", scheme: "none" };
+  }
+
+  for (const secret of secrets) {
+    if (svix && verifyQuoWebhookWithSecret(secret, req, rawBody)) {
+      return { ok: true, open: false, scheme: "svix" };
+    }
+    if (legacyHeader && verifyLegacyOpenPhoneWithSecret(secret, legacyHeader, rawBody)) {
+      return { ok: true, open: false, scheme: "openphone-legacy" };
+    }
+  }
+  return { ok: false, reason: "invalid_signature", scheme };
+}
+
+/** @deprecated use authorizeQuoWebhook */
+export async function isQuoWebhookAuthorized(
+  req: Request,
+  rawBody: string,
+  firmId?: string,
+): Promise<boolean> {
+  const r = await authorizeQuoWebhook(req, rawBody, firmId);
+  return r.ok;
+}
+
 function messageBody(obj: NonNullable<QuoMessageReceivedPayload["data"]>["object"]): string {
   return (obj?.body ?? obj?.text ?? obj?.content ?? "").toString();
 }
@@ -127,7 +229,6 @@ function messageBody(obj: NonNullable<QuoMessageReceivedPayload["data"]>["object
 /**
  * Process Quo message events. Only `message.received` with STOP keywords
  * disable reminders; signing links stay active.
- * When `firmId` is set (per-firm webhook URL), only that firm’s requests are matched.
  */
 export async function processQuoWebhookJson(
   payload: unknown,
