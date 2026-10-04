@@ -9,21 +9,10 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { timingSafeEqual } from "node:crypto";
+import { intakeTokenOk } from "@/lib/auth/intake-token";
 import { createLeadAndSigningRequest } from "@/server/signing-workflow";
 
 export const dynamic = "force-dynamic";
-
-function tokenOk(req: Request): boolean {
-  const expected = process.env.SIGNFLOW_INTAKE_TOKEN;
-  if (!expected) return false;
-  const header = req.headers.get("authorization") ?? "";
-  const provided = /^Bearer\s+(.+)$/i.exec(header)?.[1]?.trim() ?? "";
-  const a = Buffer.from(provided);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
 
 const schema = z.object({
   clientName: z.string().optional().nullable(),
@@ -43,10 +32,12 @@ const schema = z.object({
   sendSms: z.boolean().optional().default(false),
   sendEmail: z.boolean().optional().default(false),
   reminderEnabled: z.boolean().optional().default(true),
+  // Caller's own id; status changes (viewed/signed/declined/expired) are POSTed to SIGNFLOW_INTAKE_CALLBACK_URL.
+  externalRef: z.string().max(200).optional(),
 });
 
 export async function POST(req: Request) {
-  if (!tokenOk(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!intakeTokenOk(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const json = await req.json().catch(() => null);
   const parsed = schema.safeParse(json);
@@ -70,6 +61,7 @@ export async function POST(req: Request) {
         assignedTo: null,
         allowNoDelivery: true,
         firmId: d.firmId?.trim() || undefined,
+        externalRef: d.externalRef?.trim() || null,
       },
       { sub: "intake-engine", name: "Intake Engine" },
     );
@@ -78,6 +70,8 @@ export async function POST(req: Request) {
       signingRequestId: signingRequest.id,
       leadId: lead.id,
       signingUrl: signingRequest.signingUrl,
+      sentViaSms: signingRequest.sentViaSms,
+      sentViaEmail: signingRequest.sentViaEmail,
       ...(deliveryWarning ? { warning: deliveryWarning } : {}),
     });
   } catch (e) {

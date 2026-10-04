@@ -179,6 +179,8 @@ export type SigningRequest = {
   updatedAt: string;
   /** Legacy soft-hide; prefer `status: "cancelled"`. Still honored when reading old rows. */
   deletedAt?: string | null;
+  /** Caller's own id (e.g. inbound AI intake id) for requests created via /api/intake; enables status callbacks. */
+  externalRef?: string | null;
 };
 
 export type SigningEvent = {

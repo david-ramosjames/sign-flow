@@ -5,6 +5,7 @@ import { getSignFlowStore } from "@/lib/db";
 import { appendSigningEvent } from "@/services/signing-events";
 import { documentFirmId } from "@/lib/firm-scope";
 import { getFirmDocusealConnection } from "@/lib/firms";
+import { notifyIntakeCallback } from "@/lib/intake-callback";
 import {
   extractCompletionUrlsFromWebhookData,
   extractDocusealSubmissionId,
@@ -85,6 +86,7 @@ export async function processDocusealWebhookJson(payload: unknown, firmId?: stri
       metadata: { eventType, reason: "declined" },
       firmId: req.firmId,
     });
+    await notifyIntakeCallback(req, "declined");
     return;
   }
 
@@ -102,5 +104,6 @@ export async function processDocusealWebhookJson(payload: unknown, firmId?: stri
       metadata: { eventType },
       firmId: req.firmId,
     });
+    await notifyIntakeCallback(req, "expired");
   }
 }

@@ -38,6 +38,7 @@ import { sendSms } from "@/services/quo-service";
 import { appendSigningEvent } from "@/services/signing-events";
 import { isActiveSigningRequest, isCancelledSigningRequest } from "@/lib/signing-request-active";
 import { phonesMatch } from "@/lib/phone";
+import { notifyIntakeCallback } from "@/lib/intake-callback";
 import { DEFAULT_FIRM_ID, documentFirmId } from "@/lib/firm-scope";
 import { getFirmDocusealConnection, getFirmQuoConnection } from "@/lib/firms";
 import type { HipaaFormPrefill, Lead, LeadStatus, SigningRequest, SupportedLanguage } from "@/types/models";
@@ -66,6 +67,8 @@ export type CreateSigningRequestInput = {
   allowNoDelivery?: boolean;
   /** Quo from-number id (`PN…`) override for this send. */
   quoPhoneNumberId?: string | null;
+  /** Caller's own id for /api/intake requests; status changes are posted back to SIGNFLOW_INTAKE_CALLBACK_URL. */
+  externalRef?: string | null;
 };
 
 async function firmRuntime(firmId: string, quoOpts?: { phoneNumberId?: string | null; forContract?: boolean }) {
@@ -200,6 +203,7 @@ export async function createLeadAndSigningRequest(
     lastActivityAt: sentAtIso,
     createdAt: now,
     updatedAt: now,
+    externalRef: input.externalRef?.trim() || null,
   };
 
   if (!signingUrl) throw new Error("DocuSeal did not return a signing URL.");
@@ -640,6 +644,8 @@ export async function applyDocusealCompletionToRequest(input: {
     metadata: { source: input.source ?? "docuseal" },
   });
 
+  await notifyIntakeCallback(req, "signed");
+
   const { appSettings, quo } = await firmRuntime(documentFirmId(req), {
     phoneNumberId: req.quoPhoneNumberId,
     forContract: req.formKind === "contract",
@@ -778,6 +784,7 @@ export async function markSigningViewedFromWebhook(submissionId: number, firmId?
     req.updatedAt = nowIso();
     await store.upsertSigningRequest(req);
     await appendSigningEvent({ signingRequestId: req.id, leadId: req.leadId, type: "viewed", metadata: { submissionId } });
+    await notifyIntakeCallback(req, "viewed");
   }
 }
 
