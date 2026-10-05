@@ -181,6 +181,8 @@ export type SigningRequest = {
   deletedAt?: string | null;
   /** Caller's own id (e.g. inbound AI intake id) for requests created via /api/intake; enables status callbacks. */
   externalRef?: string | null;
+  /** Where status changes for this request are POSTed (set by the /api/intake caller). */
+  externalCallbackUrl?: string | null;
 };
 
 export type SigningEvent = {

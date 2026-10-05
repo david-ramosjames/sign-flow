@@ -69,6 +69,7 @@ export type CreateSigningRequestInput = {
   quoPhoneNumberId?: string | null;
   /** Caller's own id for /api/intake requests; status changes are posted back to SIGNFLOW_INTAKE_CALLBACK_URL. */
   externalRef?: string | null;
+  externalCallbackUrl?: string | null;
 };
 
 async function firmRuntime(firmId: string, quoOpts?: { phoneNumberId?: string | null; forContract?: boolean }) {
@@ -204,6 +205,7 @@ export async function createLeadAndSigningRequest(
     createdAt: now,
     updatedAt: now,
     externalRef: input.externalRef?.trim() || null,
+    externalCallbackUrl: input.externalCallbackUrl?.trim() || null,
   };
 
   if (!signingUrl) throw new Error("DocuSeal did not return a signing URL.");

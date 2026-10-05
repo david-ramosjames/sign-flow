@@ -34,6 +34,8 @@ const schema = z.object({
   reminderEnabled: z.boolean().optional().default(true),
   // Caller's own id; status changes (viewed/signed/declined/expired) are POSTed to SIGNFLOW_INTAKE_CALLBACK_URL.
   externalRef: z.string().max(200).optional(),
+  // Per-request callback URL (https). Callbacks carry `Authorization: Bearer SIGNFLOW_INTAKE_TOKEN`.
+  callbackUrl: z.string().url().startsWith("https://").max(500).optional(),
 });
 
 export async function POST(req: Request) {
@@ -62,6 +64,7 @@ export async function POST(req: Request) {
         allowNoDelivery: true,
         firmId: d.firmId?.trim() || undefined,
         externalRef: d.externalRef?.trim() || null,
+        externalCallbackUrl: d.callbackUrl ?? null,
       },
       { sub: "intake-engine", name: "Intake Engine" },
     );
