@@ -107,6 +107,10 @@ export class FirestoreSignFlowStore implements SignFlowStore {
 
   async upsertSigningRequest(doc: SigningRequest): Promise<void> {
     await col<SigningRequest>(this.db, "signingRequests").doc(doc.id).set(doc, { merge: true });
+    const { syncSigningRequestToLead } = await import("@/server/lead-sync");
+    void syncSigningRequestToLead(doc).catch((error) => {
+      console.error("[lead-sync]", error instanceof Error ? error.message : error);
+    });
   }
 
   async purgeSigningRequest(signingRequestId: string): Promise<void> {

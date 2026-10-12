@@ -1,5 +1,6 @@
 import { getSignFlowStore } from "@/lib/db";
 import { isActiveSigningRequest } from "@/lib/signing-request-active";
+import { syncContractSignals } from "@/server/lead-sync";
 import { runReminderForRequest } from "@/server/signing-workflow";
 
 export type ProcessDueRemindersResult = {
@@ -34,6 +35,10 @@ export async function processDueReminders(): Promise<ProcessDueRemindersResult> 
       errors.push({ id: r.id, error: e instanceof Error ? e.message : String(e) });
     }
   }
+
+  void syncContractSignals(items).catch((error) => {
+    console.error("[lead-sync]", error instanceof Error ? error.message : error);
+  });
 
   return { due: due.length, processed, deferred, errors };
 }
