@@ -131,14 +131,15 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
   const via = deliveryFlags(req);
   const official = officialName(req.clientName);
   const nameNeedsUpdate = Boolean(official && (lead.lead_name || "").replace(/\s+/g, " ").trim() !== official);
+  const remindersFinished = !req.nextReminderAt && nextCount > 0;
+  const seriesStillOpen = req.status === "sent" || req.status === "viewed";
+  const seriesCancelled = req.status === "cancelled" || req.status === "expired";
   const seriesDone =
     !incomingSigned &&
-    (req.status === "sent" || req.status === "viewed") &&
-    Boolean(req.manualFollowUp) &&
-    !req.nextReminderAt &&
-    nextCount > 0 &&
+    remindersFinished &&
     !lead.signed_case &&
-    !CLOSED_LEAD.has(lead.lead_status);
+    !CLOSED_LEAD.has(lead.lead_status) &&
+    ((seriesStillOpen && Boolean(req.manualFollowUp)) || (seriesCancelled && nextCount >= 6));
   const unchanged =
     lead.agreement_status === nextStatus &&
     (lead.agreement_reminder_count ?? 0) === nextCount &&
