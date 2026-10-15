@@ -7,6 +7,7 @@ import type { SigningRequest } from "@/types/models";
 
 type LeadRow = {
   id: string;
+  lead_name: string | null;
   signed_case: boolean;
   lead_status: string;
   agreement_status: string | null;
@@ -15,7 +16,23 @@ type LeadRow = {
   agreement_next_reminder_at: string | null;
   agreement_via_sms: boolean | null;
   agreement_via_email: boolean | null;
+  callrail_tags: string[] | null;
 };
+
+const CLOSED_LEAD = new Set(["Lost", "Referred", "Promoted", "Signed"]);
+
+function officialName(value: string | null | undefined): string | null {
+  const name = String(value || "").replace(/\s+/g, " ").trim();
+  if (name.length < 3 || /^(null|undefined|unknown|client|n\/a|na)$/i.test(name)) return null;
+  return name;
+}
+
+function unresponsiveTags(tags: string[] | null): string[] {
+  const next = (tags ?? []).filter((tag) => tag !== "QUALIFIED YES");
+  if (!next.includes("QUALIFIED NO")) next.push("QUALIFIED NO");
+  if (!next.includes("NQ: Unresponsive")) next.push("NQ: Unresponsive");
+  return next;
+}
 
 function deliveryFlags(req: SigningRequest): { sms: boolean; email: boolean } {
   if (req.sentViaSms || req.sentViaEmail) {
@@ -72,7 +89,7 @@ async function rest(path: string, init?: RequestInit): Promise<Response> {
 
 async function findLead(phone: string): Promise<LeadRow | null> {
   const response = await rest(
-    `leads?phone_e164=eq.${encodeURIComponent(phone)}&select=id,signed_case,lead_status,agreement_status,agreement_sent_at,agreement_reminder_count,agreement_next_reminder_at,agreement_via_sms,agreement_via_email&order=created_at.desc&limit=8`,
+    `leads?phone_e164=eq.${encodeURIComponent(phone)}&select=id,lead_name,signed_case,lead_status,agreement_status,agreement_sent_at,agreement_reminder_count,agreement_next_reminder_at,agreement_via_sms,agreement_via_email,callrail_tags&order=created_at.desc&limit=8`,
   );
   if (!response.ok) {
     const detail = await response.text();
@@ -109,6 +126,16 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
   const nextCount = req.reminderCount ?? 0;
   const nextReminder = req.nextReminderAt;
   const via = deliveryFlags(req);
+  const official = officialName(req.clientName);
+  const nameNeedsUpdate = Boolean(official && (lead.lead_name || "").replace(/\s+/g, " ").trim() !== official);
+  const seriesDone =
+    !incomingSigned &&
+    (req.status === "sent" || req.status === "viewed") &&
+    Boolean(req.manualFollowUp) &&
+    !req.nextReminderAt &&
+    nextCount > 0 &&
+    !lead.signed_case &&
+    !CLOSED_LEAD.has(lead.lead_status);
   const unchanged =
     lead.agreement_status === nextStatus &&
     (lead.agreement_reminder_count ?? 0) === nextCount &&
@@ -116,6 +143,8 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
     sameInstant(lead.agreement_sent_at, incomingSent) &&
     lead.agreement_via_sms === via.sms &&
     lead.agreement_via_email === via.email &&
+    !nameNeedsUpdate &&
+    !seriesDone &&
     (!incomingSigned || lead.signed_case);
 
   if (unchanged) return;
@@ -130,6 +159,16 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
     patch.agreement_signing_url = req.signingUrl;
     patch.agreement_via_sms = via.sms;
     patch.agreement_via_email = via.email;
+    if (official && nameNeedsUpdate) patch.lead_name = official;
+  }
+  if (seriesDone) {
+    patch.lead_status = "Lost";
+    patch.close_reason = "no_response";
+    patch.follow_up = false;
+    patch.sequence = "stop";
+    patch.qualified = false;
+    patch.close_suggestion = null;
+    patch.callrail_tags = unresponsiveTags(lead.callrail_tags);
   }
   if (incomingSigned && !lead.signed_case) {
     patch.signed_case = true;
@@ -154,9 +193,13 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
 
   const eventType = incomingSigned
     ? "agreement_signed"
-    : nextCount > (lead.agreement_reminder_count ?? 0)
-      ? "agreement_reminder"
-      : "agreement_sent";
+    : seriesDone
+      ? "no_response"
+      : nameNeedsUpdate && lead.agreement_status === nextStatus
+        ? "name_corrected"
+        : nextCount > (lead.agreement_reminder_count ?? 0)
+          ? "agreement_reminder"
+          : "agreement_sent";
   const noted = await rest("lead_events", {
     method: "POST",
     headers: { Prefer: "return=minimal" },
@@ -172,6 +215,7 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
         last_reminder_at: req.lastReminderAt,
         via_sms: via.sms,
         via_email: via.email,
+        lead_name: official,
       },
     }),
   });
@@ -180,13 +224,13 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
     console.error(`[lead-sync] Event was not saved (${noted.status}): ${detail.slice(0, 180)}`);
   }
 
-  if (incomingSigned && !lead.signed_case) {
+  if ((incomingSigned && !lead.signed_case) || seriesDone) {
     await rest(`lead_jobs?lead_id=eq.${lead.id}&status=eq.pending`, {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
       body: JSON.stringify({
         status: "skipped",
-        detail: "Client signed in Sign Flow.",
+        detail: seriesDone ? "Sign Flow reminder series finished with no signature." : "Client signed in Sign Flow.",
       }),
     });
   }
