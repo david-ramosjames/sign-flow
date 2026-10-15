@@ -58,7 +58,10 @@ function toE164(phone: string | null | undefined): string | null {
 function isContract(req: SigningRequest): boolean {
   if (req.formKind === "hipaa" || req.formKind === "sar" || req.formKind === "disbursement") return false;
   if (req.formKind === "contract") return true;
-  return /contract|retainer|contingency/i.test(req.templateName || "");
+  if (/hipaa|disbursement|\bsar\b/i.test(req.templateName || "")) return false;
+  if (/contract|retainer|contingency/i.test(req.templateName || "")) return true;
+  // Older requests have no form kind. They are the representation contract.
+  return !req.formKind;
 }
 
 function sameInstant(left: string | null | undefined, right: string | null | undefined): boolean {
