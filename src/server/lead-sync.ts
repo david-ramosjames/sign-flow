@@ -13,7 +13,17 @@ type LeadRow = {
   agreement_sent_at: string | null;
   agreement_reminder_count: number | null;
   agreement_next_reminder_at: string | null;
+  agreement_via_sms: boolean | null;
+  agreement_via_email: boolean | null;
 };
+
+function deliveryFlags(req: SigningRequest): { sms: boolean; email: boolean } {
+  if (req.sentViaSms || req.sentViaEmail) {
+    return { sms: Boolean(req.sentViaSms), email: Boolean(req.sentViaEmail) };
+  }
+  if (!req.reminderEnabled) return { sms: false, email: false };
+  return { sms: Boolean(req.phone?.trim()), email: Boolean(req.email) };
+}
 
 let backfilled = false;
 
@@ -62,7 +72,7 @@ async function rest(path: string, init?: RequestInit): Promise<Response> {
 
 async function findLead(phone: string): Promise<LeadRow | null> {
   const response = await rest(
-    `leads?phone_e164=eq.${encodeURIComponent(phone)}&select=id,signed_case,lead_status,agreement_status,agreement_sent_at,agreement_reminder_count,agreement_next_reminder_at&order=created_at.desc&limit=8`,
+    `leads?phone_e164=eq.${encodeURIComponent(phone)}&select=id,signed_case,lead_status,agreement_status,agreement_sent_at,agreement_reminder_count,agreement_next_reminder_at,agreement_via_sms,agreement_via_email&order=created_at.desc&limit=8`,
   );
   if (!response.ok) {
     const detail = await response.text();
@@ -98,11 +108,14 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
   const nextStatus = req.status;
   const nextCount = req.reminderCount ?? 0;
   const nextReminder = req.nextReminderAt;
+  const via = deliveryFlags(req);
   const unchanged =
     lead.agreement_status === nextStatus &&
     (lead.agreement_reminder_count ?? 0) === nextCount &&
     sameInstant(lead.agreement_next_reminder_at, nextReminder) &&
     sameInstant(lead.agreement_sent_at, incomingSent) &&
+    lead.agreement_via_sms === via.sms &&
+    lead.agreement_via_email === via.email &&
     (!incomingSigned || lead.signed_case);
 
   if (unchanged) return;
@@ -115,6 +128,8 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
     patch.agreement_next_reminder_at = nextReminder;
     patch.agreement_reminder_count = nextCount;
     patch.agreement_signing_url = req.signingUrl;
+    patch.agreement_via_sms = via.sms;
+    patch.agreement_via_email = via.email;
   }
   if (incomingSigned && !lead.signed_case) {
     patch.signed_case = true;
@@ -155,6 +170,8 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
         reminder_count: nextCount,
         next_reminder_at: nextReminder,
         last_reminder_at: req.lastReminderAt,
+        via_sms: via.sms,
+        via_email: via.email,
       },
     }),
   });
