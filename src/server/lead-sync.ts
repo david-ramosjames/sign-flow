@@ -165,7 +165,8 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
     patch.agreement_via_email = via.email;
     if (official && nameNeedsUpdate) patch.lead_name = official;
   }
-  if (seriesDone) {
+  const practiceTest = phone === "+17654183805";
+  if (seriesDone && !practiceTest) {
     patch.lead_status = "Lost";
     patch.close_reason = "no_response";
     patch.follow_up = false;
@@ -174,7 +175,7 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
     patch.close_suggestion = null;
     patch.callrail_tags = unresponsiveTags(lead.callrail_tags);
   }
-  if (incomingSigned && !lead.signed_case) {
+  if (incomingSigned && !lead.signed_case && !practiceTest) {
     patch.signed_case = true;
     patch.signed_at = req.completedAt || req.updatedAt;
     patch.follow_up = false;
