@@ -653,7 +653,6 @@ export async function applyDocusealCompletionToRequest(input: {
     forContract: req.formKind === "contract",
   });
   const completionSettings = mergeCompletionNotifications(appSettings);
-  const documentUrl = req.signedPdfUrl ?? req.signingUrl ?? "";
 
   if (completionSettings.thankYouSmsEnabled && req.phone?.trim()) {
     try {
@@ -674,91 +673,7 @@ export async function applyDocusealCompletionToRequest(input: {
     }
   }
 
-  const teamEmails = parseEmailList(completionSettings.teamNotificationEmails);
-  if (teamEmails.length > 0) {
-    const base = req.clientName.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-") || "signed";
-    const attachments: EmailAttachment[] = [];
-
-    if (req.signedPdfUrl) {
-      try {
-        const pdfBytes = await downloadUrlToBuffer(req.signedPdfUrl);
-        attachments.push({ filename: `${base}-signed.pdf`, content: pdfBytes, mimeType: "application/pdf" });
-      } catch (e) {
-        await appendSigningEvent({
-          signingRequestId: req.id,
-          leadId: req.leadId,
-          type: "failed",
-          metadata: { step: "team_completed_pdf", error: String(e) },
-        });
-      }
-    }
-
-    if (req.auditCertificateUrl) {
-      try {
-        const auditBytes = await downloadUrlToBuffer(req.auditCertificateUrl);
-        attachments.push({ filename: `${base}-audit-log.pdf`, content: auditBytes, mimeType: "application/pdf" });
-      } catch (e) {
-        await appendSigningEvent({
-          signingRequestId: req.id,
-          leadId: req.leadId,
-          type: "failed",
-          metadata: { step: "team_completed_audit", error: String(e) },
-        });
-      }
-    }
-
-    const { subject, text } = teamCompletedEmailFromSettings(appSettings, {
-      clientName: req.clientName,
-      templateName: req.templateName,
-      documentUrl: documentUrl || "(see attached PDF or check DocuSeal)",
-    });
-
-    const sentTo: string[] = [];
-    for (const email of teamEmails) {
-      try {
-        const mail = await sendTransactionalEmail({
-          to: email,
-          subject,
-          textBody: text,
-          attachments: attachments.length ? attachments : undefined,
-          purpose: "completion",
-        });
-        if (!mail.ok) throw new Error(mail.error);
-        sentTo.push(email);
-        await appendSigningEvent({
-          signingRequestId: req.id,
-          leadId: req.leadId,
-          type: "email_sent",
-          metadata: {
-            kind: "team_completed",
-            to: email,
-            attachedPdf: attachments.some((a) => a.filename.endsWith("-signed.pdf")),
-            attachedAudit: attachments.some((a) => a.filename.endsWith("-audit-log.pdf")),
-          },
-        });
-      } catch (e) {
-        await appendSigningEvent({
-          signingRequestId: req.id,
-          leadId: req.leadId,
-          type: "failed",
-          metadata: { step: "team_completed_email", to: email, error: String(e) },
-        });
-      }
-    }
-
-    if (sentTo.length === 0 && teamEmails.length > 0) {
-      await appendSigningEvent({
-        signingRequestId: req.id,
-        leadId: req.leadId,
-        type: "failed",
-        metadata: {
-          step: "team_completed_email",
-          to: teamEmails.join(", "),
-          error: "All team completion emails failed.",
-        },
-      });
-    }
-  }
+  await sendTeamCompletionEmailsForRequest(req, { isResend: false });
 
   if (process.env.DROPBOX_ACCESS_TOKEN) {
     try {
@@ -773,6 +688,136 @@ export async function applyDocusealCompletionToRequest(input: {
       });
     }
   }
+}
+
+/** Send (or retry) team completion emails with signed PDF / audit attachments. */
+export async function sendTeamCompletionEmailsForRequest(
+  req: SigningRequest,
+  opts?: { isResend?: boolean },
+): Promise<{ sentTo: string[]; teamEmails: string[] }> {
+  const isResend = opts?.isResend === true;
+  const { appSettings } = await firmRuntime(documentFirmId(req), {
+    phoneNumberId: req.quoPhoneNumberId,
+    forContract: req.formKind === "contract",
+  });
+  const completionSettings = mergeCompletionNotifications(appSettings);
+  const teamEmails = parseEmailList(completionSettings.teamNotificationEmails);
+  if (teamEmails.length === 0) {
+    return { sentTo: [], teamEmails: [] };
+  }
+
+  const documentUrl = req.signedPdfUrl ?? req.signingUrl ?? "";
+  const base = req.clientName.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-") || "signed";
+  const attachments: EmailAttachment[] = [];
+
+  if (req.signedPdfUrl) {
+    try {
+      const pdfBytes = await downloadUrlToBuffer(req.signedPdfUrl);
+      attachments.push({ filename: `${base}-signed.pdf`, content: pdfBytes, mimeType: "application/pdf" });
+    } catch (e) {
+      await appendSigningEvent({
+        signingRequestId: req.id,
+        leadId: req.leadId,
+        type: "failed",
+        metadata: { step: "team_completed_pdf", error: String(e) },
+      });
+    }
+  }
+
+  if (req.auditCertificateUrl) {
+    try {
+      const auditBytes = await downloadUrlToBuffer(req.auditCertificateUrl);
+      attachments.push({ filename: `${base}-audit-log.pdf`, content: auditBytes, mimeType: "application/pdf" });
+    } catch (e) {
+      await appendSigningEvent({
+        signingRequestId: req.id,
+        leadId: req.leadId,
+        type: "failed",
+        metadata: { step: "team_completed_audit", error: String(e) },
+      });
+    }
+  }
+
+  const { subject, text } = teamCompletedEmailFromSettings(appSettings, {
+    clientName: req.clientName,
+    templateName: req.templateName,
+    documentUrl: documentUrl || "(see attached PDF or check DocuSeal)",
+  });
+
+  const sentTo: string[] = [];
+  for (const email of teamEmails) {
+    try {
+      const mail = await sendTransactionalEmail({
+        to: email,
+        subject,
+        textBody: text,
+        attachments: attachments.length ? attachments : undefined,
+        purpose: "completion",
+      });
+      if (!mail.ok) throw new Error(mail.error);
+      sentTo.push(email);
+      await appendSigningEvent({
+        signingRequestId: req.id,
+        leadId: req.leadId,
+        type: "email_sent",
+        metadata: {
+          kind: "team_completed",
+          to: email,
+          attachedPdf: attachments.some((a) => a.filename.endsWith("-signed.pdf")),
+          attachedAudit: attachments.some((a) => a.filename.endsWith("-audit-log.pdf")),
+          ...(isResend ? { resend: true } : {}),
+        },
+      });
+    } catch (e) {
+      await appendSigningEvent({
+        signingRequestId: req.id,
+        leadId: req.leadId,
+        type: "failed",
+        metadata: { step: "team_completed_email", to: email, error: String(e) },
+      });
+    }
+  }
+
+  if (sentTo.length === 0 && teamEmails.length > 0) {
+    await appendSigningEvent({
+      signingRequestId: req.id,
+      leadId: req.leadId,
+      type: "failed",
+      metadata: {
+        step: "team_completed_email",
+        to: teamEmails.join(", "),
+        error: "All team completion emails failed.",
+      },
+    });
+  }
+
+  return { sentTo, teamEmails };
+}
+
+/**
+ * Retry team completion email after a provider failure (e.g. rotated Gmail service account key).
+ * Request must already be completed (or signed) so PDF URLs exist when available.
+ */
+export async function resendTeamCompletionEmails(signingRequestId: string): Promise<{
+  sentTo: string[];
+  teamEmails: string[];
+}> {
+  const store = getSignFlowStore();
+  const req = await store.getSigningRequest(signingRequestId);
+  if (!req) throw new Error("Not found");
+  if (!isActiveSigningRequest(req)) throw new Error("This signing request was cancelled.");
+  if (req.status !== "completed" && req.status !== "signed") {
+    throw new Error("Team completion email is only available after the document is signed.");
+  }
+
+  const result = await sendTeamCompletionEmailsForRequest(req, { isResend: true });
+  if (result.teamEmails.length === 0) {
+    throw new Error("No team notification emails are configured in Admin → Messages.");
+  }
+  if (result.sentTo.length === 0) {
+    throw new Error("Team completion email failed. Check Gmail Workspace service account env vars on Vercel.");
+  }
+  return result;
 }
 
 export async function markSigningViewedFromWebhook(submissionId: number, firmId?: string): Promise<void> {

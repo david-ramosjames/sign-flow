@@ -115,6 +115,7 @@ export default function SigningRequestDetailPage() {
   const [smsFailedBanner, setSmsFailedBanner] = useState(false);
   const [resendBusy, setResendBusy] = useState<"sms" | "email" | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [teamEmailBusy, setTeamEmailBusy] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
   const [stopRemindersBusy, setStopRemindersBusy] = useState(false);
   const [purgeBusy, setPurgeBusy] = useState(false);
@@ -391,6 +392,31 @@ export default function SigningRequestDetailPage() {
           >
             {syncBusy ? "Syncing from DocuSeal…" : "Refresh from DocuSeal"}
           </button>
+          {(item.status === "completed" || item.status === "signed") && !isCancelled ? (
+            <button
+              type="button"
+              disabled={teamEmailBusy}
+              className="w-full rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-950 hover:bg-violet-100 disabled:opacity-40"
+              onClick={async () => {
+                setFeedback(null);
+                setTeamEmailBusy(true);
+                const res = await fetch(`/api/signing-requests/${id}/resend-team-email`, {
+                  method: "POST",
+                  credentials: "include",
+                });
+                const j = (await res.json().catch(() => null)) as { error?: string; message?: string } | null;
+                setTeamEmailBusy(false);
+                setFeedback(
+                  res.ok
+                    ? { ok: true, text: j?.message ?? "Team completion email sent." }
+                    : { ok: false, text: j?.error ?? "Could not send team completion email." },
+                );
+                void refresh();
+              }}
+            >
+              {teamEmailBusy ? "Sending team email…" : "Retry team completion email"}
+            </button>
+          ) : null}
           <button
             type="button"
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
