@@ -28,18 +28,38 @@ function describeEvent(ev: SigningEvent): { title: string; detail?: string; tone
       const tpl = num(m.templateId);
       return { title: "Request created", detail: `Created ${via}${tpl ? ` · template #${tpl}` : ""}.`, tone: "info" };
     }
-    case "sms_sent":
+    case "sms_sent": {
+      if (str(m.kind) === "thank_you") {
+        return {
+          title: "Thank-you text sent",
+          detail: "A thank-you text was sent to the client after signing.",
+          tone: "info",
+        };
+      }
       return {
         title: isReminder ? "Reminder sent by text" : "Text message sent",
         detail: isReminder ? "A follow-up text nudged the client to sign." : "The signing link was texted to the client.",
         tone: "info",
       };
-    case "email_sent":
+    }
+    case "email_sent": {
+      if (str(m.kind) === "team_completed") {
+        const to = str(m.to);
+        const resent = m.resend === true;
+        return {
+          title: resent ? "Team completion email resent" : "Team completion email sent",
+          detail: to
+            ? `Internal signed-document notice sent to ${to}.`
+            : "Internal signed-document notice sent to the team.",
+          tone: "success",
+        };
+      }
       return {
         title: isReminder ? "Reminder sent by email" : "Email sent",
         detail: isReminder ? "A follow-up email nudged the client to sign." : "The signing link was emailed to the client.",
         tone: "info",
       };
+    }
     case "reminder_sent": {
       const count = num(m.count);
       const channels = [m.sms ? "text" : null, m.email ? "email" : null].filter(Boolean).join(" & ");
