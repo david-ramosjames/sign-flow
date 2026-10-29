@@ -2,8 +2,10 @@ import type { SigningRequest } from "@/types/models";
 
 // Sign Flow stays on Firestore. When a contract is sent, reminded, or signed,
 // the same phone is updated on the shared Docket lead so Intake Manager can
-// show it. No-op until LEADS_SUPABASE_URL and LEADS_SUPABASE_SERVICE_ROLE_KEY
-// are set on this service. Those are the Docket project, not a Firebase key.
+// show it. No-op until LEADS_SUPABASE_URL and a server secret are set.
+// Prefer LEADS_SUPABASE_SECRET_KEY (sb_secret_…) over the legacy
+// LEADS_SUPABASE_SERVICE_ROLE_KEY (JWT). Do not use the publishable /
+// anon key here — lead writes bypass RLS and need a secret key.
 
 type LeadRow = {
   id: string;
@@ -44,8 +46,17 @@ function deliveryFlags(req: SigningRequest): { sms: boolean; email: boolean } {
 
 let backfilled = false;
 
+/** Docket Supabase server key: new `sb_secret_…` or legacy `service_role` JWT. */
+function leadsSupabaseSecretKey(): string {
+  return (
+    process.env.LEADS_SUPABASE_SECRET_KEY?.trim() ||
+    process.env.LEADS_SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+    ""
+  );
+}
+
 export function leadsSyncConfigured(): boolean {
-  return Boolean(process.env.LEADS_SUPABASE_URL && process.env.LEADS_SUPABASE_SERVICE_ROLE_KEY);
+  return Boolean(process.env.LEADS_SUPABASE_URL?.trim() && leadsSupabaseSecretKey());
 }
 
 function toE164(phone: string | null | undefined): string | null {
@@ -78,7 +89,7 @@ function baseUrl(): string {
 }
 
 async function rest(path: string, init?: RequestInit): Promise<Response> {
-  const key = process.env.LEADS_SUPABASE_SERVICE_ROLE_KEY || "";
+  const key = leadsSupabaseSecretKey();
   return fetch(`${baseUrl()}/rest/v1/${path}`, {
     ...init,
     headers: {
