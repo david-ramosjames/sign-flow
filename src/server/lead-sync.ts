@@ -145,11 +145,19 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
   const remindersFinished = !req.nextReminderAt && nextCount > 0;
   const seriesStillOpen = req.status === "sent" || req.status === "viewed";
   const seriesCancelled = req.status === "cancelled" || req.status === "expired";
+  const leadAgreement = (lead.agreement_status || "").toLowerCase();
+  // Staff reopened after this series already finished — do not keep slamming Lost.
+  const seriesAlreadySettledOnLead =
+    leadAgreement === "reopened" ||
+    (["cancelled", "expired"].includes(leadAgreement) &&
+      (lead.agreement_reminder_count ?? 0) >= 6 &&
+      !lead.agreement_next_reminder_at);
   const seriesDone =
     !incomingSigned &&
     remindersFinished &&
     !lead.signed_case &&
     !CLOSED_LEAD.has(lead.lead_status) &&
+    !seriesAlreadySettledOnLead &&
     ((seriesStillOpen && Boolean(req.manualFollowUp)) || (seriesCancelled && nextCount >= 6));
   const unchanged =
     lead.agreement_status === nextStatus &&
@@ -166,7 +174,10 @@ export async function syncSigningRequestToLead(req: SigningRequest): Promise<voi
 
   const patch: Record<string, unknown> = {};
   if (!incomingIsOlder) {
-    patch.agreement_status = nextStatus;
+    // Keep "reopened" so an old cancelled series cannot overwrite staff reopen.
+    if (!(leadAgreement === "reopened" && seriesCancelled && !incomingSigned)) {
+      patch.agreement_status = nextStatus;
+    }
     patch.agreement_sent_at = incomingSent;
     patch.agreement_last_reminder_at = req.lastReminderAt;
     patch.agreement_next_reminder_at = nextReminder;
